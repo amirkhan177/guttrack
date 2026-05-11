@@ -1,0 +1,14 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/daily-insights",
+      "schedule": "0 8 * * *",
+      "timezone": "America/Denver"
+    },
+    {
+      "path": "/api/notifications/feedback-reminder",
+      "schedule": "0 22 * * *",
+      "timezone": "America/Denver"
+    }
+  ]
+}

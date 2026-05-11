@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc *)",
+      "Bash(./node_modules/.bin/tsc --noEmit --skipLibCheck)",
+      "Bash(npm install *)",
+      "Bash(\"/Users/ak/GutApp test/node_modules/.bin/tsc\" --noEmit --skipLibCheck)",
+      "Skill(claude-api)",
+      "Skill(claude-api:*)",
+      "Bash(curl -s -X POST https://maycpaurglpnfalgmqds.supabase.co/rest/v1/rpc/exec_sql -H 'apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1heWNwYXVyZ2xwbmZhbGdtcWRzIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ1MjQxMSwiZXhwIjoyMDk0MDI4NDExfQ.hZ66BDuqDnkxxhTwWOAHTM0VuI-SY0Np7gEBNVg-BNo' -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1heWNwYXVyZ2xwbmZhbGdtcWRzIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ1MjQxMSwiZXhwIjoyMDk0MDI4NDExfQ.hZ66BDuqDnkxxhTwWOAHTM0VuI-SY0Np7gEBNVg-BNo' -H 'Content-Type: application/json' -d '{\"query\": __CMDSUB_OUTPUT__')",
+      "Bash(supabase --version)",
+      "Bash(curl -s 'https://maycpaurglpnfalgmqds.supabase.co/rest/v1/?apikey=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1heWNwYXVyZ2xwbmZhbGdtcWRzIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ1MjQxMSwiZXhwIjoyMDk0MDI4NDExfQ.hZ66BDuqDnkxxhTwWOAHTM0VuI-SY0Np7gEBNVg-BNo' -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1heWNwYXVyZ2xwbmZhbGdtcWRzIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ1MjQxMSwiZXhwIjoyMDk0MDI4NDExfQ.hZ66BDuqDnkxxhTwWOAHTM0VuI-SY0Np7gEBNVg-BNo')",
+      "Bash(python3 -c ' *)",
+      "Bash(openssl rand *)",
+      "Bash(npx web-push *)",
+      "Bash(npm run *)",
+      "Bash(curl -s http://localhost:3000/)",
+      "Bash(pkill -f \"next dev\")",
+      "Bash(git init *)",
+      "Bash(git add *)"
+    ]
+  }
+}
