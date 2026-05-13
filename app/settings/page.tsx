@@ -377,9 +377,9 @@ export default function SettingsPage() {
   const [ouraSaving, setOuraSaving] = useState(false);
   const [ouraTestResult, setOuraTestResult] = useState<string | null>(null);
 
-  // Claude AI
-  const [claudeKey, setClaudeKey] = useState("");
-  const [claudeSaving, setClaudeSaving] = useState(false);
+  // Gemini AI
+  const [geminiKey, setGeminiKey] = useState("");
+  const [geminiSaving, setGeminiSaving] = useState(false);
 
   // Notifications
   const [mealReminders, setMealReminders] = useState(false);
@@ -435,7 +435,7 @@ export default function SettingsPage() {
     const meta = user.user_metadata ?? {};
     setOuraConnected(!!meta.oura_connected);
     setOuraLastSync(meta.oura_last_sync ?? null);
-    setClaudeKey(meta.claude_api_key ?? "");
+    setGeminiKey(meta.gemini_api_key ?? "");
     setMealReminders(!!meta.meal_reminders);
     setBreakfastTime(meta.breakfast_time ?? "08:00");
     setLunchTime(meta.lunch_time ?? "12:30");
@@ -528,16 +528,16 @@ export default function SettingsPage() {
     }
   }
 
-  // ── Claude AI ──
+  // ── Gemini AI ──
 
-  async function saveClaudeKey() {
-    if (!claudeKey.trim()) return;
-    setClaudeSaving(true);
+  async function saveGeminiKey() {
+    if (!geminiKey.trim()) return;
+    setGeminiSaving(true);
     refreshActivity();
     await supabase.auth.updateUser({
-      data: { claude_api_key: claudeKey.trim() },
+      data: { gemini_api_key: geminiKey.trim() },
     });
-    setClaudeSaving(false);
+    setGeminiSaving(false);
   }
 
   // ── Notifications ──
@@ -739,23 +739,23 @@ export default function SettingsPage() {
           )}
         </Card>
 
-        {/* ── CLAUDE AI ── */}
-        <SectionLabel>Claude AI</SectionLabel>
+        {/* ── Gemini AI ── */}
+        <SectionLabel>Gemini AI</SectionLabel>
         <Card>
           <div>
             <FieldLabel>API Key</FieldLabel>
             <MaskedInput
-              value={claudeKey}
-              onChange={setClaudeKey}
-              placeholder="sk-ant-..."
+              value={geminiKey}
+              onChange={setGeminiKey}
+              placeholder="AIzaSy..."
             />
           </div>
           <ActionButton
-            onClick={saveClaudeKey}
+            onClick={saveGeminiKey}
             variant="green"
-            disabled={claudeSaving || !claudeKey.trim()}
+            disabled={geminiSaving || !geminiKey.trim()}
           >
-            {claudeSaving ? "SAVING..." : "SAVE"}
+            {geminiSaving ? "SAVING..." : "SAVE"}
           </ActionButton>
         </Card>
 

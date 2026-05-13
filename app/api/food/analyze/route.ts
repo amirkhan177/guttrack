@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
-import Anthropic from '@anthropic-ai/sdk'
+import { GoogleGenerativeAI } from '@google/generative-ai'
 
 function getSupabaseServer() {
   const cookieStore = cookies()
@@ -37,12 +37,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Description required' }, { status: 400 })
     }
 
-    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 800,
-      system: `You are a gut health nutrition analyst specializing in post-giardia gut recovery and IgA nephropathy kidney protection.
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '')
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-2.0-flash',
+      systemInstruction: `You are a gut health nutrition analyst specializing in post-giardia gut recovery and IgA nephropathy kidney protection.
 Given a food description, map it to structured fields and provide gut-specific analysis.
 
 PROTEIN options (pick the single closest match): Chicken, Fish, Eggs, Red Meat, Lentils/Dal, Tofu, None
@@ -50,9 +48,9 @@ CARBS options (pick the single closest match): White Rice, Bread, Pasta, Cooked 
 SPICE options (pick one): None, Mild, Medium, Hot, Very Hot
 
 Return ONLY valid JSON, no markdown.`,
-      messages: [{
-        role: 'user',
-        content: `Analyze this food for gut health impact: "${description}"
+    })
+
+    const result = await model.generateContent(`Analyze this food for gut health impact: "${description}"
 
 Return JSON with exactly this structure:
 {
@@ -65,11 +63,9 @@ Return JSON with exactly this structure:
   "gut_cautions": ["<caution if any, else empty array>"],
   "ibs_trigger_risk": "<low|moderate|high>",
   "kidney_notes": "<one sentence on potassium/phosphorus/protein load relevant to IgA nephropathy>"
-}`
-      }]
-    })
+}`)
 
-    const raw = response.content[0].type === 'text' ? response.content[0].text : ''
+    const raw = result.response.text()
 
     let parsed: FoodAnalysis
     try {

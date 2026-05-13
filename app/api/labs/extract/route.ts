@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
-import Anthropic from '@anthropic-ai/sdk'
+import { GoogleGenerativeAI } from '@google/generative-ai'
 
 function getSupabaseServer() {
   const cookieStore = cookies()
@@ -80,77 +80,39 @@ export async function POST(req: NextRequest) {
     ]
 
     const mimeType = file.type || 'application/octet-stream'
-    if (!allowedTypes.some(t => mimeType.includes(t.split('/')[1]))) {
-      return NextResponse.json({ error: 'Unsupported file type. Upload PDF or image.' }, { status: 400 })
-    }
+    // Map MIME type for Gemini
+    let finalMime = mimeType
+    if (mimeType === 'image/jpg') finalMime = 'image/jpeg'
 
     const bytes = await file.arrayBuffer()
     const base64 = Buffer.from(bytes).toString('base64')
 
-    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-
-    // Build content block based on file type
-    type ContentBlock =
-      | { type: 'document'; source: { type: 'base64'; media_type: 'application/pdf'; data: string } }
-      | { type: 'image'; source: { type: 'base64'; media_type: 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif'; data: string } }
-      | { type: 'text'; text: string }
-
-    let fileBlock: ContentBlock
-
-    const isPdf = mimeType.includes('pdf')
-
-    if (isPdf) {
-      fileBlock = {
-        type: 'document',
-        source: {
-          type: 'base64',
-          media_type: 'application/pdf',
-          data: base64,
-        },
-      }
-    } else {
-      // Normalize image mime type to Claude-supported types
-      let imgMime: 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif' = 'image/jpeg'
-      if (mimeType.includes('png')) imgMime = 'image/png'
-      else if (mimeType.includes('webp')) imgMime = 'image/webp'
-
-      fileBlock = {
-        type: 'image',
-        source: {
-          type: 'base64',
-          media_type: imgMime,
-          data: base64,
-        },
-      }
-    }
-
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 2000,
-      system: SYSTEM_PROMPT,
-      messages: [
-        {
-          role: 'user',
-          content: [
-            fileBlock,
-            {
-              type: 'text',
-              text: 'Extract all lab test results from this report. Remember: ignore all patient PII. Return only the JSON object.',
-            },
-          ],
-        },
-      ],
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '')
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-2.0-flash',
+      systemInstruction: SYSTEM_PROMPT,
     })
 
-    const raw = response.content[0].type === 'text' ? response.content[0].text : ''
+    const result = await model.generateContent([
+      {
+        inlineData: {
+          data: base64,
+          mimeType: finalMime,
+        },
+      },
+      {
+        text: 'Extract all lab test results from this report. Remember: ignore all patient PII. Return only the JSON object.',
+      },
+    ])
+
+    const raw = result.response.text()
 
     let parsed: { labs: ExtractedLab[] }
     try {
-      parsed = JSON.parse(raw)
-    } catch {
       const match = raw.match(/\{[\s\S]*\}/)
-      if (!match) throw new Error('No JSON in Claude response')
-      parsed = JSON.parse(match[0])
+      parsed = JSON.parse(match ? match[0] : raw)
+    } catch {
+      throw new Error('No JSON in response')
     }
 
     if (!Array.isArray(parsed.labs)) {

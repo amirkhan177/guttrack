@@ -8,7 +8,7 @@ Personal gut health AI. Post-giardia recovery + IgA nephropathy tracking. iPhone
 - Supabase (auth + database + RLS)
 - Vercel (deployment + cron)
 - Oura Ring API (biometric data)
-- Claude AI (insights + predictions)
+- Gemini AI (insights + predictions)
 - Web Push (notifications)
 
 ---
@@ -38,7 +38,7 @@ NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 
-ANTHROPIC_API_KEY=sk-ant-...
+GEMINI_API_KEY=AIzaSy...
 
 CRON_SECRET=generate-a-random-string-here
 NEXT_PUBLIC_VAPID_PUBLIC_KEY=your-vapid-public-key
@@ -107,7 +107,7 @@ Cron jobs in `vercel.json` activate automatically on deploy (Pro plan required f
 ```
 Oura Ring API → oura_metrics table
 Meal logs → meal_logs table
-Both → Claude API → daily_insights table
+Both → Gemini API → daily_insights table
 Nightly feedback → daily_feedback table → improves future predictions
 ```
 
@@ -149,5 +149,5 @@ The manifest references `/icon-192.png` and `/icon-512.png`. Add these to `/publ
 | `lab_results` | Manual lab test entries |
 | `supplements` | Supplement registry |
 | `supplement_logs` | Daily supplement taken records |
-| `daily_insights` | Claude-generated analysis + predictions |
+| `daily_insights` | Gemini-generated analysis + predictions |
 | `daily_feedback` | Nightly feedback + accuracy scores |

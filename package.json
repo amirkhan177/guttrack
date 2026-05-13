@@ -10,7 +10,7 @@
     "generate-vapid": "node -e \"const webpush = require('web-push'); const keys = webpush.generateVAPIDKeys(); console.log('Public:', keys.publicKey); console.log('Private:', keys.privateKey);\""
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.36.3",
+    "@google/generative-ai": "^0.24.1",
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.49.4",
     "next": "14.2.29",

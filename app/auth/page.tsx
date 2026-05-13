@@ -23,7 +23,10 @@ export default function AuthPage() {
     const supabase = createSupabaseBrowserClient();
     const { error: err } = await supabase.auth.signInWithOtp({
       email,
-      options: { shouldCreateUser: true },
+      options: { 
+        shouldCreateUser: true,
+        emailRedirectTo: `${window.location.origin}/auth/callback`
+      },
     });
     setLoading(false);
     if (err) {

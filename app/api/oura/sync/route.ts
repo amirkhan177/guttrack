@@ -4,6 +4,7 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { OuraClient } from '@/lib/oura'
+import { getMtnDate } from '@/lib/dates'
 
 function getSupabaseServer() {
   const cookieStore = cookies()
@@ -12,12 +13,6 @@ function getSupabaseServer() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     { cookies: { getAll: () => cookieStore.getAll() } }
   )
-}
-
-function getMtnDate(offsetDays = 0): string {
-  const d = new Date()
-  d.setDate(d.getDate() + offsetDays)
-  return d.toLocaleDateString('en-CA', { timeZone: 'America/Denver' })
 }
 
 export async function POST() {

@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
-import Anthropic from '@anthropic-ai/sdk'
+import { GoogleGenerativeAI } from '@google/generative-ai'
 
 function getSupabaseServer() {
   const cookieStore = cookies()
@@ -111,7 +111,7 @@ export async function POST() {
       ouraSection = `YESTERDAY OURA SIGNALS:\n${ouraLines.join('\n')}`
     }
 
-    const formatMeals = (meals: Record<string, unknown>[], label: string): string => {
+    const formatMeals = (meals: any[], label: string): string => {
       if (meals.length === 0) return `${label}: No meals logged`
       const lines = meals.map((meal) => {
         const symptoms = Array.isArray(meal.symptom_tags) ? meal.symptom_tags.join(', ') : ''
@@ -120,10 +120,10 @@ export async function POST() {
       return `${label}:\n${lines.join('\n')}`
     }
 
-    const mealsTodaySection = formatMeals(mealsToday as Record<string, unknown>[], "TODAY'S MEALS SO FAR")
-    const mealsYesterdaySection = formatMeals(mealsYesterday as Record<string, unknown>[], "YESTERDAY'S MEALS")
+    const mealsTodaySection = formatMeals(mealsToday, "TODAY'S MEALS SO FAR")
+    const mealsYesterdaySection = formatMeals(mealsYesterday, "YESTERDAY'S MEALS")
 
-    const feedbackLines = feedback.map((fb: Record<string, unknown>) =>
+    const feedbackLines = feedback.map((fb: any) =>
       `  ${fb.date}: predicted ${fb.predicted_score}, actual ${fb.actual_score}, accuracy ${fb.accuracy_percent}%`
     )
     const feedbackSection = feedbackLines.length > 0
@@ -131,7 +131,7 @@ export async function POST() {
       : 'FEEDBACK ACCURACY HISTORY: No entries yet'
 
     const patternLines = insightHistory
-      .map((insight: Record<string, unknown>) => {
+      .map((insight: any) => {
         const patterns = Array.isArray(insight.patterns) ? insight.patterns.join('; ') : ''
         return patterns ? `  ${insight.date}: ${patterns}` : null
       })
@@ -140,7 +140,7 @@ export async function POST() {
       ? `RECENT ANALYSIS PATTERNS:\n${patternLines.join('\n')}`
       : 'RECENT ANALYSIS PATTERNS: No history available'
 
-    const medicationLines = (medications as Record<string, unknown>[]).map(m =>
+    const medicationLines = medications.map((m: any) =>
       `  ${m.name} ${m.dosage ?? ''}${m.unit ?? ''} — ${m.frequency ?? 'daily'} (${m.time_of_day ?? 'unspecified time'})`
     )
     const medicationsSection = medicationLines.length > 0
@@ -169,17 +169,14 @@ export async function POST() {
       medicationsSection,
     ].filter(Boolean).join('\n\n')
 
-    // Call Anthropic
-    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+    // Call Gemini
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '')
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-2.0-flash',
+      systemInstruction: `You are a personalized gut health prediction engine. You have today's Oura biometrics, recent meal patterns, and this person's history of predictions versus actual outcomes. Your job is to forecast tomorrow's gut health. Use the feedback accuracy history to calibrate — if you previously over-predicted flares adjust downward. If certain food and stress signal combinations reliably triggered symptoms weight those heavily. Return only valid JSON.`,
+    })
 
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 2000,
-      system: `You are a personalized gut health prediction engine. You have today's Oura biometrics, recent meal patterns, and this person's history of predictions versus actual outcomes. Your job is to forecast tomorrow's gut health. Use the feedback accuracy history to calibrate — if you previously over-predicted flares adjust downward. If certain food and stress signal combinations reliably triggered symptoms weight those heavily. Return only valid JSON.`,
-      messages: [
-        {
-          role: 'user',
-          content: `Predict tomorrow's gut health and return JSON matching exactly this schema:
+    const result = await model.generateContent(`Predict tomorrow's gut health and return JSON matching exactly this schema:
 {
   "forecast": { "flare_risk_level": "None"|"Low"|"Moderate"|"High"|"Critical", "confidence_percent": number, "reasoning": string },
   "avoid_tomorrow": [{ "label": string, "reason": string }],
@@ -188,29 +185,22 @@ export async function POST() {
 }
 
 DATA:
-${promptSections}${coldStartNote}`,
-        },
-      ],
-    })
+${promptSections}${coldStartNote}`)
 
-    const rawText =
-      response.content[0].type === 'text' ? response.content[0].text : ''
+    const rawText = result.response.text()
 
-    let parsed: Record<string, unknown>
+    let parsed: Record<string, any>
     try {
-      parsed = JSON.parse(rawText)
-    } catch {
       const match = rawText.match(/\{[\s\S]*\}/)
-      if (!match) {
-        return NextResponse.json(
-          { error: 'Failed to parse AI response as JSON' },
-          { status: 500 }
-        )
-      }
-      parsed = JSON.parse(match[0])
+      parsed = JSON.parse(match ? match[0] : rawText)
+    } catch {
+      return NextResponse.json(
+        { error: 'Failed to parse AI response as JSON' },
+        { status: 500 }
+      )
     }
 
-    const forecast = parsed.forecast as Record<string, unknown>
+    const forecast = parsed.forecast
 
     // Delete existing prediction for today and insert fresh
     await supabase

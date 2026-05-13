@@ -2,8 +2,7 @@ export const dynamic = 'force-dynamic'
 
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
-import Anthropic from '@anthropic-ai/sdk'
-import type { TextBlock } from '@anthropic-ai/sdk/resources/messages/messages'
+import { GoogleGenerativeAI } from '@google/generative-ai'
 import { OuraClient } from '@/lib/oura'
 
 function getServiceClient() {
@@ -53,7 +52,7 @@ async function generateInsightsForUser(
   userId: string,
   date: string,
   service: ReturnType<typeof getServiceClient>,
-  anthropic: Anthropic
+  genAI: GoogleGenerativeAI
 ): Promise<void> {
   const yesterday = getMtnDateStr(-1)
 
@@ -108,34 +107,38 @@ async function generateInsightsForUser(
     supplements,
   })
 
+  const model = genAI.getGenerativeModel({
+    model: 'gemini-2.0-flash',
+  })
+
   // Generate daily summary insight
-  const summaryMessage = await anthropic.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 2048,
-    system: `You are GutTrack, an AI gut health analyst. Analyze the user's health data and generate a concise daily summary. Return valid JSON only with these fields:
+  const summaryResult = await model.generateContent({
+    contents: [{
+      role: 'user',
+      parts: [{
+        text: `You are GutTrack, an AI gut health analyst specializing in post-giardia recovery and IgA nephropathy. 
+Analyze the user's health data and generate a concise daily summary. 
+Return valid JSON only with these fields:
 {
   "summary": "string - 2-3 sentence overview",
   "gut_score": number (0-100),
   "flare_risk_level": "None" | "Low" | "Moderate" | "High" | "Critical",
   "key_observations": ["string"],
   "recommendations": ["string"]
-}`,
-    messages: [
-      {
-        role: 'user',
-        content: `Generate a daily gut health summary for ${date}.\n\nData:\n${contextBlock}`,
-      },
-    ],
+}
+
+Data:
+${contextBlock}`
+      }]
+    }]
   })
 
-  const summaryTextBlock = summaryMessage.content.find(
-    (b): b is TextBlock => b.type === 'text'
-  )
-  const summaryText = summaryTextBlock?.text ?? '{}'
+  const summaryText = summaryResult.response.text()
 
-  let summaryData: Record<string, unknown> = {}
+  let summaryData: Record<string, any> = {}
   try {
-    summaryData = JSON.parse(summaryText)
+    const match = summaryText.match(/\{[\s\S]*\}/)
+    summaryData = JSON.parse(match ? match[0] : summaryText)
   } catch {
     console.error(`[cron/daily-insights] failed to parse summary JSON for user ${userId}`)
   }
@@ -159,33 +162,33 @@ async function generateInsightsForUser(
 
   // Generate prediction insight for tomorrow
   const tomorrow = getMtnDateStr(1)
-  const predictionMessage = await anthropic.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 2048,
-    system: `You are GutTrack, an AI gut health predictor. Based on today's data, predict tomorrow's gut health. Return valid JSON only:
+  const predictionResult = await model.generateContent({
+    contents: [{
+      role: 'user',
+      parts: [{
+        text: `You are GutTrack, an AI gut health predictor. 
+Based on today's data, predict tomorrow's gut health for a patient with post-giardia recovery and IgA nephropathy. 
+Return valid JSON only:
 {
   "flare_risk_level": "None" | "Low" | "Moderate" | "High" | "Critical",
   "confidence": number (0-100),
   "watch_for": ["string - symptom names"],
   "reasoning": "string",
   "preventive_actions": ["string"]
-}`,
-    messages: [
-      {
-        role: 'user',
-        content: `Predict gut health for ${tomorrow} based on today's (${date}) data.\n\nData:\n${contextBlock}`,
-      },
-    ],
+}
+
+Data:
+${contextBlock}`
+      }]
+    }]
   })
 
-  const predictionTextBlock = predictionMessage.content.find(
-    (b): b is TextBlock => b.type === 'text'
-  )
-  const predictionText = predictionTextBlock?.text ?? '{}'
+  const predictionText = predictionResult.response.text()
 
-  let predictionData: Record<string, unknown> = {}
+  let predictionData: Record<string, any> = {}
   try {
-    predictionData = JSON.parse(predictionText)
+    const match = predictionText.match(/\{[\s\S]*\}/)
+    predictionData = JSON.parse(match ? match[0] : predictionText)
   } catch {
     console.error(`[cron/daily-insights] failed to parse prediction JSON for user ${userId}`)
   }
@@ -216,7 +219,7 @@ export async function GET(req: NextRequest) {
     }
 
     const service = getServiceClient()
-    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '')
 
     const { data: usersData, error: usersError } = await service.auth.admin.listUsers()
     if (usersError) {
@@ -251,7 +254,7 @@ export async function GET(req: NextRequest) {
         ])
 
         // Generate insights for today
-        await generateInsightsForUser(user.id, today, service, anthropic)
+        await generateInsightsForUser(user.id, today, service, genAI)
 
         processed++
       } catch (err) {
