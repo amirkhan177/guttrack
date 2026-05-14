@@ -243,10 +243,15 @@ export default function InsightsPage() {
     setError("");
     try {
       const res = await fetch("/api/insights/daily", { method: "POST" });
-      if (!res.ok) throw new Error("Generate failed");
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || data.error || "Generate failed");
+      }
       await loadData();
-    } catch {
-      setError("Failed to generate insights. Please try again.");
+    } catch (err: unknown) {
+      console.error("Generate error:", err);
+      const message = err instanceof Error ? err.message : "Failed to generate insights. Please try again.";
+      setError(message);
     } finally {
       setGenerating(false);
     }
