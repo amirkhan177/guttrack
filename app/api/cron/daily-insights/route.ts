@@ -4,6 +4,8 @@ import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { OuraClient } from '@/lib/oura'
+import { getMtnDate } from '@/lib/dates'
+import type { MealLog, OuraMetrics, DailyFeedback, WeightEntry, SupplementLog } from '@/lib/supabase'
 
 function getServiceClient() {
   return createClient(
@@ -11,12 +13,6 @@ function getServiceClient() {
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     { auth: { persistSession: false } }
   )
-}
-
-function getMtnDateStr(offsetDays = 0): string {
-  const d = new Date()
-  d.setDate(d.getDate() + offsetDays)
-  return d.toLocaleDateString('en-CA', { timeZone: 'America/Denver' })
 }
 
 interface UserRecord {
@@ -54,7 +50,7 @@ async function generateInsightsForUser(
   service: ReturnType<typeof getServiceClient>,
   genAI: GoogleGenerativeAI
 ): Promise<void> {
-  const yesterday = getMtnDateStr(-1)
+  const yesterday = getMtnDate(-1)
 
   // Fetch all relevant data for the user
   const [mealsRes, ouraRes, feedbackRes, weightRes, supplementsRes] = await Promise.allSettled([
@@ -92,11 +88,11 @@ async function generateInsightsForUser(
       .lte('date', date),
   ])
 
-  const meals = mealsRes.status === 'fulfilled' ? (mealsRes.value.data ?? []) : []
-  const oura = ouraRes.status === 'fulfilled' ? (ouraRes.value.data ?? []) : []
-  const feedback = feedbackRes.status === 'fulfilled' ? (feedbackRes.value.data ?? []) : []
-  const weight = weightRes.status === 'fulfilled' ? (weightRes.value.data ?? []) : []
-  const supplements = supplementsRes.status === 'fulfilled' ? (supplementsRes.value.data ?? []) : []
+  const meals = mealsRes.status === 'fulfilled' ? (mealsRes.value.data as MealLog[]) ?? [] : []
+  const oura = ouraRes.status === 'fulfilled' ? (ouraRes.value.data as OuraMetrics | null) : null
+  const feedback = feedbackRes.status === 'fulfilled' ? (feedbackRes.value.data as DailyFeedback[]) ?? [] : []
+  const weight = weightRes.status === 'fulfilled' ? (weightRes.value.data as WeightEntry[]) ?? [] : []
+  const supplements = supplementsRes.status === 'fulfilled' ? (supplementsRes.value.data as SupplementLog[]) ?? [] : []
 
   const contextBlock = JSON.stringify({
     date,
@@ -135,7 +131,15 @@ ${contextBlock}`
 
   const summaryText = summaryResult.response.text()
 
-  let summaryData: Record<string, any> = {}
+  interface SummaryData {
+    summary?: string
+    gut_score?: number
+    flare_risk_level?: string
+    key_observations?: string[]
+    recommendations?: string[]
+  }
+
+  let summaryData: SummaryData = {}
   try {
     const match = summaryText.match(/\{[\s\S]*\}/)
     summaryData = JSON.parse(match ? match[0] : summaryText)
@@ -161,7 +165,7 @@ ${contextBlock}`
   )
 
   // Generate prediction insight for tomorrow
-  const tomorrow = getMtnDateStr(1)
+  const tomorrow = getMtnDate(1)
   const predictionResult = await model.generateContent({
     contents: [{
       role: 'user',
@@ -185,7 +189,15 @@ ${contextBlock}`
 
   const predictionText = predictionResult.response.text()
 
-  let predictionData: Record<string, any> = {}
+  interface PredictionData {
+    flare_risk_level?: string
+    confidence?: number
+    watch_for?: string[]
+    reasoning?: string
+    preventive_actions?: string[]
+  }
+
+  let predictionData: PredictionData = {}
   try {
     const match = predictionText.match(/\{[\s\S]*\}/)
     predictionData = JSON.parse(match ? match[0] : predictionText)
@@ -204,7 +216,7 @@ ${contextBlock}`
       flare_risk_level: predictionData.flare_risk_level ?? null,
       key_observations: [],
       recommendations: predictionData.preventive_actions ?? [],
-      prediction: predictionData,
+      prediction: predictionData as Record<string, unknown>,
       generated_at: new Date().toISOString(),
     },
     { onConflict: 'user_id,date,window_type' }
@@ -231,8 +243,8 @@ export async function GET(req: NextRequest) {
       u => u.user_metadata?.oura_connected && u.user_metadata?.oura_token
     )
 
-    const yesterday = getMtnDateStr(-1)
-    const today = getMtnDateStr(0)
+    const yesterday = getMtnDate(-1)
+    const today = getMtnDate(0)
 
     let processed = 0
     const errors: string[] = []

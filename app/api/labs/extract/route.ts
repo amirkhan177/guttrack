@@ -69,16 +69,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'File too large (max 10MB)' }, { status: 400 })
     }
 
-    const allowedTypes = [
-      'application/pdf',
-      'image/jpeg',
-      'image/jpg',
-      'image/png',
-      'image/webp',
-      'image/heic',
-      'image/heif',
-    ]
-
     const mimeType = file.type || 'application/octet-stream'
     // Map MIME type for Gemini
     let finalMime = mimeType

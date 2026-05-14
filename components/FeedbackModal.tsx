@@ -49,9 +49,7 @@ export default function FeedbackModal({ isOpen, onClose }: Props) {
   const [accuracyScore, setAccuracyScore] = useState<number | null>(null)
 
   const [todayStr, setTodayStr] = useState('')
-  const [yesterdayStr, setYesterdayStr] = useState('')
   const [prediction, setPrediction] = useState<Record<string, unknown> | null>(null)
-  const [loadingData, setLoadingData] = useState(false)
 
   const touchStartY = useRef<number | null>(null)
 
@@ -77,8 +75,6 @@ export default function FeedbackModal({ isOpen, onClose }: Props) {
     const yesterday = yesterdayDate.toLocaleDateString('en-CA', { timeZone: 'America/Denver' })
 
     setTodayStr(today)
-    setYesterdayStr(yesterday)
-    setLoadingData(true)
 
     const supabase = createSupabaseBrowserClient()
 
@@ -113,8 +109,6 @@ export default function FeedbackModal({ isOpen, onClose }: Props) {
         if (fb.actual_symptoms) setActiveSymptoms(fb.actual_symptoms)
         if (fb.notes) setNotes(fb.notes)
       }
-
-      setLoadingData(false)
     })
   }, [isOpen])
 

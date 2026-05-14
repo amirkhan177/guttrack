@@ -107,7 +107,8 @@ export function constructInsightsPrompt(data: InsightsData): string {
   const profileLines: string[] = []
   if (userMetadata.age) profileLines.push(`Age: ${userMetadata.age}`)
   if (userMetadata.height_cm) {
-    const totalIn = Math.round(userMetadata.height_cm / 2.54)
+    const height = userMetadata.height_cm as number
+    const totalIn = Math.round(height / 2.54)
     profileLines.push(`Height: ${Math.floor(totalIn / 12)}ft ${totalIn % 12}in`)
   }
   if (userMetadata.ethnicity) profileLines.push(`Ethnicity: ${userMetadata.ethnicity}`)

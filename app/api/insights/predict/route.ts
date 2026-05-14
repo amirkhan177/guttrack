@@ -4,6 +4,8 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { GoogleGenerativeAI } from '@google/generative-ai'
+import { getMtnDate } from '@/lib/dates'
+import type { MealLog, DailyFeedback } from '@/lib/supabase'
 
 function getSupabaseServer() {
   const cookieStore = cookies()
@@ -14,11 +16,7 @@ function getSupabaseServer() {
   )
 }
 
-function getMtnDate(offsetDays = 0): string {
-  const d = new Date()
-  d.setDate(d.getDate() + offsetDays)
-  return d.toLocaleDateString('en-CA', { timeZone: 'America/Denver' })
-}
+
 
 export async function POST() {
   try {
@@ -90,11 +88,11 @@ export async function POST() {
     ])
 
     const oura = ouraResult.data
-    const mealsToday = mealsTodayResult.data ?? []
-    const mealsYesterday = mealsYesterdayResult.data ?? []
-    const feedback = feedbackResult.data ?? []
-    const insightHistory = insightHistoryResult.data ?? []
-    const medications = medicationsResult.data ?? []
+    const mealsToday = mealsTodayResult.data as MealLog[] ?? []
+    const mealsYesterday = mealsYesterdayResult.data as MealLog[] ?? []
+    const feedback = feedbackResult.data as DailyFeedback[] ?? []
+    const insightHistory = insightHistoryResult.data as { date: string; patterns: string[] }[] ?? []
+    const medications = medicationsResult.data as { name: string; dosage: string | null; unit: string | null; frequency: string | null; time_of_day: string | null }[] ?? []
 
     // Cold start check
     const coldStartNote =
@@ -111,7 +109,7 @@ export async function POST() {
       ouraSection = `YESTERDAY OURA SIGNALS:\n${ouraLines.join('\n')}`
     }
 
-    const formatMeals = (meals: any[], label: string): string => {
+    const formatMeals = (meals: MealLog[], label: string): string => {
       if (meals.length === 0) return `${label}: No meals logged`
       const lines = meals.map((meal) => {
         const symptoms = Array.isArray(meal.symptom_tags) ? meal.symptom_tags.join(', ') : ''
@@ -120,10 +118,11 @@ export async function POST() {
       return `${label}:\n${lines.join('\n')}`
     }
 
+
     const mealsTodaySection = formatMeals(mealsToday, "TODAY'S MEALS SO FAR")
     const mealsYesterdaySection = formatMeals(mealsYesterday, "YESTERDAY'S MEALS")
 
-    const feedbackLines = feedback.map((fb: any) =>
+    const feedbackLines = feedback.map((fb: Record<string, unknown>) =>
       `  ${fb.date}: predicted ${fb.predicted_score}, actual ${fb.actual_score}, accuracy ${fb.accuracy_percent}%`
     )
     const feedbackSection = feedbackLines.length > 0
@@ -131,7 +130,7 @@ export async function POST() {
       : 'FEEDBACK ACCURACY HISTORY: No entries yet'
 
     const patternLines = insightHistory
-      .map((insight: any) => {
+      .map((insight: Record<string, unknown>) => {
         const patterns = Array.isArray(insight.patterns) ? insight.patterns.join('; ') : ''
         return patterns ? `  ${insight.date}: ${patterns}` : null
       })
@@ -140,7 +139,7 @@ export async function POST() {
       ? `RECENT ANALYSIS PATTERNS:\n${patternLines.join('\n')}`
       : 'RECENT ANALYSIS PATTERNS: No history available'
 
-    const medicationLines = medications.map((m: any) =>
+    const medicationLines = medications.map((m: Record<string, unknown>) =>
       `  ${m.name} ${m.dosage ?? ''}${m.unit ?? ''} — ${m.frequency ?? 'daily'} (${m.time_of_day ?? 'unspecified time'})`
     )
     const medicationsSection = medicationLines.length > 0
@@ -189,7 +188,7 @@ ${promptSections}${coldStartNote}`)
 
     const rawText = result.response.text()
 
-    let parsed: Record<string, any>
+    let parsed: Record<string, unknown>
     try {
       const match = rawText.match(/\{[\s\S]*\}/)
       parsed = JSON.parse(match ? match[0] : rawText)
@@ -200,7 +199,7 @@ ${promptSections}${coldStartNote}`)
       )
     }
 
-    const forecast = parsed.forecast
+    const forecast = (parsed.forecast as { flare_risk_level: string; reasoning: string; confidence_percent: number }) || {}
 
     // Delete existing prediction for today and insert fresh
     await supabase

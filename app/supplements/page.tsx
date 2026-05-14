@@ -8,7 +8,6 @@ import {
   getPinFromSession,
   isSessionExpired,
   refreshActivity,
-  clearSession,
 } from "@/lib/crypto";
 import NavBar from "@/components/NavBar";
 
@@ -55,7 +54,7 @@ const BORDER = "#1e1e2e";
 const GREEN = "#7EB8A4";
 const YELLOW = "#FFD93D";
 const RED = "#FF6B6B";
-const ORANGE = "#FF8C42";
+// const ORANGE = "#FF8C42";
 
 const MONO: React.CSSProperties = {
   fontFamily: "SF Mono, ui-monospace, monospace",

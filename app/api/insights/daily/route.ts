@@ -3,11 +3,11 @@ import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { 
-  getMtnDate, 
   constructInsightsPrompt, 
   generateDailyInsights, 
   InsightsData 
 } from '@/lib/insights'
+import { getMtnDate } from '@/lib/dates'
 import { 
   MealLog, 
   OuraMetrics, 
@@ -18,6 +18,7 @@ import {
   WorkoutLog, 
   LabResult 
 } from '@/lib/supabase'
+
 
 function getSupabaseServer() {
   const cookieStore = cookies()

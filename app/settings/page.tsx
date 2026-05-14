@@ -302,7 +302,7 @@ function DeleteConfirmOverlay({
             marginBottom: 8,
           }}
         >
-          TYPE "DELETE" TO CONFIRM
+          TYPE &quot;DELETE&quot; TO CONFIRM
         </div>
         <input
           value={confirmText}
