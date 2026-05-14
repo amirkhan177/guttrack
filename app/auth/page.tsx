@@ -11,7 +11,7 @@ export default function AuthPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [step, setStep] = useState<"email" | "code">("email");
-  const [code, setCode] = useState(["", "", "", "", "", ""]);
+  const [code, setCode] = useState(["", "", "", "", "", "", "", ""]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
@@ -37,7 +37,7 @@ export default function AuthPage() {
 
   async function handleVerify() {
     const token = code.join("");
-    if (token.length < 6) return;
+    if (token.length < 8) return;
     setError("");
     setLoading(true);
     const supabase = createSupabaseBrowserClient();
@@ -49,7 +49,7 @@ export default function AuthPage() {
     setLoading(false);
     if (err) {
       setError("Invalid code. Try again.");
-      setCode(["", "", "", "", "", ""]);
+      setCode(["", "", "", "", "", "", "", ""]);
       inputRefs.current[0]?.focus();
     } else {
       router.replace("/pin");
@@ -61,11 +61,11 @@ export default function AuthPage() {
     const next = [...code];
     next[index] = digit;
     setCode(next);
-    if (digit && index < 5) {
+    if (digit && index < 7) {
       inputRefs.current[index + 1]?.focus();
     }
     if (next.every((d) => d !== "")) {
-      // auto-submit when all 6 filled
+      // auto-submit when all 8 filled
       const token = next.join("");
       setLoading(true);
       setError("");
@@ -74,7 +74,7 @@ export default function AuthPage() {
         setLoading(false);
         if (err) {
           setError("Invalid code. Try again.");
-          setCode(["", "", "", "", "", ""]);
+          setCode(["", "", "", "", "", "", "", ""]);
           inputRefs.current[0]?.focus();
         } else {
           router.replace("/pin");
@@ -91,18 +91,18 @@ export default function AuthPage() {
 
   function handlePaste(e: React.ClipboardEvent) {
     e.preventDefault();
-    const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
+    const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 8);
     if (!pasted) return;
     const next = [...code];
-    for (let i = 0; i < 6; i++) next[i] = pasted[i] ?? "";
+    for (let i = 0; i < 8; i++) next[i] = pasted[i] ?? "";
     setCode(next);
-    const lastFilled = Math.min(pasted.length, 5);
+    const lastFilled = Math.min(pasted.length, 7);
     inputRefs.current[lastFilled]?.focus();
   }
 
   return (
-    <div style={{ background: "#0A0A0F", minHeight: "100dvh", display: "flex", alignItems: "center", justifyContent: "center", padding: "0 24px" }}>
-      <div style={{ width: "100%", maxWidth: 340 }}>
+    <div style={{ background: "#0A0A0F", minHeight: "100dvh", display: "flex", alignItems: "center", justifyContent: "center", padding: "0 20px" }}>
+      <div style={{ width: "100%", maxWidth: 360 }}>
 
         {/* Logo */}
         <div style={{ textAlign: "center", marginBottom: 40 }}>
@@ -171,8 +171,8 @@ export default function AuthPage() {
               <p style={{ fontFamily: mono, fontSize: 12, color: "#888" }}>{email}</p>
             </div>
 
-            {/* 6-digit input */}
-            <div style={{ display: "flex", gap: 8 }} onPaste={handlePaste}>
+            {/* 8-digit input */}
+            <div style={{ display: "flex", gap: 6 }} onPaste={handlePaste}>
               {code.map((digit, i) => (
                 <input
                   key={i}
@@ -185,15 +185,15 @@ export default function AuthPage() {
                   onKeyDown={(e) => handleCodeKeyDown(i, e)}
                   autoFocus={i === 0}
                   style={{
-                    width: 44,
-                    height: 56,
+                    width: 36,
+                    height: 52,
                     textAlign: "center",
-                    borderRadius: 12,
+                    borderRadius: 10,
                     border: `1.5px solid ${digit ? "#7EB8A4" : "#1e1e2e"}`,
                     background: "#15151f",
                     color: "#e8e8f0",
                     fontFamily: mono,
-                    fontSize: 22,
+                    fontSize: 20,
                     fontWeight: 700,
                     outline: "none",
                   }}
@@ -228,7 +228,7 @@ export default function AuthPage() {
             </button>
 
             <button
-              onClick={() => { setStep("email"); setCode(["", "", "", "", "", ""]); setError(""); }}
+              onClick={() => { setStep("email"); setCode(["", "", "", "", "", "", "", ""]); setError(""); }}
               style={{
                 background: "transparent",
                 border: "none",
