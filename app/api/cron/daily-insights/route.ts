@@ -5,7 +5,21 @@ import { NextRequest, NextResponse } from 'next/server'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { OuraClient } from '@/lib/oura'
 import { getMtnDate } from '@/lib/dates'
-import type { MealLog, OuraMetrics, DailyFeedback, WeightEntry, SupplementLog } from '@/lib/supabase'
+import { 
+  constructInsightsPrompt, 
+  generateDailyInsights, 
+  InsightsData 
+} from '@/lib/insights'
+import type { 
+  MealLog, 
+  OuraMetrics, 
+  DailyFeedback, 
+  WeightEntry, 
+  SupplementLog, 
+  Supplement, 
+  WorkoutLog, 
+  LabResult 
+} from '@/lib/supabase'
 
 function getServiceClient() {
   return createClient(
@@ -34,7 +48,7 @@ async function hasRecentMeals(userId: string, service: ReturnType<typeof getServ
     .from('meal_logs')
     .select('id')
     .eq('user_id', userId)
-    .gte('date', since)
+    .gte('timestamp', `${since}T00:00:00Z`)
     .limit(1)
 
   if (error) {
@@ -46,181 +60,95 @@ async function hasRecentMeals(userId: string, service: ReturnType<typeof getServ
 
 async function generateInsightsForUser(
   userId: string,
-  date: string,
+  userMetadata: Record<string, unknown>,
   service: ReturnType<typeof getServiceClient>,
   genAI: GoogleGenerativeAI
 ): Promise<void> {
   const yesterday = getMtnDate(-1)
+  const today = getMtnDate(0)
 
-  // Fetch all relevant data for the user
-  const [mealsRes, ouraRes, feedbackRes, weightRes, supplementsRes] = await Promise.allSettled([
-    service
-      .from('meal_logs')
-      .select('*')
-      .eq('user_id', userId)
-      .gte('date', yesterday)
-      .lte('date', date)
-      .order('date', { ascending: false }),
-    service
-      .from('oura_metrics')
-      .select('*')
-      .eq('user_id', userId)
-      .gte('date', yesterday)
-      .lte('date', date)
-      .order('date', { ascending: false }),
-    service
-      .from('daily_feedback')
-      .select('*')
-      .eq('user_id', userId)
-      .order('date', { ascending: false })
-      .limit(14),
-    service
-      .from('weight_entries')
-      .select('*')
-      .eq('user_id', userId)
-      .order('date', { ascending: false })
-      .limit(7),
-    service
-      .from('supplement_logs')
-      .select('*')
-      .eq('user_id', userId)
-      .gte('date', yesterday)
-      .lte('date', date),
+  // Fetch all data in parallel
+  const [
+    mealsYestResult,
+    mealsTodayResult,
+    ouraResult,
+    feedbackResult,
+    weightResult,
+    suppTakenResult,
+    suppScheduledResult,
+    workoutsResult,
+    labsResult,
+  ] = await Promise.all([
+    service.from('meal_logs').select('*').eq('user_id', userId)
+      .gte('timestamp', new Date(`${yesterday}T00:00:00-07:00`).toISOString())
+      .lte('timestamp', new Date(`${yesterday}T23:59:59-07:00`).toISOString()),
+
+    service.from('meal_logs').select('*').eq('user_id', userId)
+      .gte('timestamp', new Date(`${today}T00:00:00-07:00`).toISOString())
+      .lte('timestamp', new Date(`${today}T23:59:59-07:00`).toISOString()),
+
+    service.from('oura_metrics').select('*').eq('user_id', userId).eq('date', yesterday).maybeSingle(),
+
+    service.from('daily_feedback').select('*').eq('user_id', userId).order('date', { ascending: false }).limit(30),
+
+    service.from('weight_entries').select('*').eq('user_id', userId).order('date', { ascending: false }).limit(7),
+
+    service.from('supplement_logs').select('*, supplements(*)').eq('user_id', userId).eq('date', yesterday),
+
+    service.from('supplements').select('*').eq('user_id', userId).eq('active', true),
+
+    service.from('workout_logs').select('*').eq('user_id', userId)
+      .gte('date', yesterday).lte('date', today).order('date', { ascending: false }),
+
+    service.from('lab_results').select('*').eq('user_id', userId)
+      .order('date', { ascending: false }).limit(20),
   ])
 
-  const meals = mealsRes.status === 'fulfilled' ? (mealsRes.value.data as MealLog[]) ?? [] : []
-  const oura = ouraRes.status === 'fulfilled' ? (ouraRes.value.data as OuraMetrics | null) : null
-  const feedback = feedbackRes.status === 'fulfilled' ? (feedbackRes.value.data as DailyFeedback[]) ?? [] : []
-  const weight = weightRes.status === 'fulfilled' ? (weightRes.value.data as WeightEntry[]) ?? [] : []
-  const supplements = supplementsRes.status === 'fulfilled' ? (supplementsRes.value.data as SupplementLog[]) ?? [] : []
-
-  const contextBlock = JSON.stringify({
-    date,
-    meals,
-    oura_metrics: oura,
-    recent_feedback: feedback,
-    weight_entries: weight,
-    supplements,
-  })
-
-  const model = genAI.getGenerativeModel({
-    model: 'gemini-2.0-flash',
-  })
-
-  // Generate daily summary insight
-  const summaryResult = await model.generateContent({
-    contents: [{
-      role: 'user',
-      parts: [{
-        text: `You are GutTrack, an AI gut health analyst specializing in post-giardia recovery and IgA nephropathy. 
-Analyze the user's health data and generate a concise daily summary. 
-Return valid JSON only with these fields:
-{
-  "summary": "string - 2-3 sentence overview",
-  "gut_score": number (0-100),
-  "flare_risk_level": "None" | "Low" | "Moderate" | "High" | "Critical",
-  "key_observations": ["string"],
-  "recommendations": ["string"]
-}
-
-Data:
-${contextBlock}`
-      }]
-    }]
-  })
-
-  const summaryText = summaryResult.response.text()
-
-  interface SummaryData {
-    summary?: string
-    gut_score?: number
-    flare_risk_level?: string
-    key_observations?: string[]
-    recommendations?: string[]
+  const insightsData: InsightsData = {
+    mealsYest: (mealsYestResult.status === 'fulfilled' ? mealsYestResult.value.data as MealLog[] : []) ?? [],
+    mealsToday: (mealsTodayResult.status === 'fulfilled' ? mealsTodayResult.value.data as MealLog[] : []) ?? [],
+    oura: (ouraResult.status === 'fulfilled' ? ouraResult.value.data as OuraMetrics : null),
+    feedback: (feedbackResult.status === 'fulfilled' ? feedbackResult.value.data as DailyFeedback[] : []) ?? [],
+    weight: (weightResult.status === 'fulfilled' ? weightResult.value.data as WeightEntry[] : []) ?? [],
+    suppTaken: (suppTakenResult.status === 'fulfilled' ? suppTakenResult.value.data as (SupplementLog & { supplements: Supplement })[] : []) ?? [],
+    suppScheduled: (suppScheduledResult.status === 'fulfilled' ? suppScheduledResult.value.data as Supplement[] : []) ?? [],
+    workouts: (workoutsResult.status === 'fulfilled' ? workoutsResult.value.data as WorkoutLog[] : []) ?? [],
+    labs: (labsResult.status === 'fulfilled' ? labsResult.value.data as LabResult[] : []) ?? [],
+    userMetadata: userMetadata
   }
 
-  let summaryData: SummaryData = {}
+  const promptData = constructInsightsPrompt(insightsData)
+  const result = await generateDailyInsights(genAI, promptData)
+  const response = await result.response
+  const rawText = response.text()
+
+  let parsed: Record<string, unknown>
   try {
-    const match = summaryText.match(/\{[\s\S]*\}/)
-    summaryData = JSON.parse(match ? match[0] : summaryText)
-  } catch {
-    console.error(`[cron/daily-insights] failed to parse summary JSON for user ${userId}`)
+    const match = rawText.match(/\{[\s\S]*\}/)
+    parsed = JSON.parse(match ? match[0] : rawText)
+  } catch (e) {
+    console.error(`[cron/daily-insights] JSON parse error for ${userId}: ${e}`)
+    return
   }
 
-  // Upsert summary insight
-  await service.from('daily_insights').upsert(
-    {
-      user_id: userId,
-      date,
-      window_type: 'summary',
-      summary: summaryData.summary ?? null,
-      gut_score: summaryData.gut_score ?? null,
-      flare_risk_level: summaryData.flare_risk_level ?? null,
-      key_observations: summaryData.key_observations ?? [],
-      recommendations: summaryData.recommendations ?? [],
-      prediction: null,
-      generated_at: new Date().toISOString(),
-    },
-    { onConflict: 'user_id,date,window_type' }
-  )
+  const flareRisk = parsed.flare_risk as Record<string, unknown>
+  const forecast = parsed.today_forecast as Record<string, unknown>
 
-  // Generate prediction insight for tomorrow
-  const tomorrow = getMtnDate(1)
-  const predictionResult = await model.generateContent({
-    contents: [{
-      role: 'user',
-      parts: [{
-        text: `You are GutTrack, an AI gut health predictor. 
-Based on today's data, predict tomorrow's gut health for a patient with post-giardia recovery and IgA nephropathy. 
-Return valid JSON only:
-{
-  "flare_risk_level": "None" | "Low" | "Moderate" | "High" | "Critical",
-  "confidence": number (0-100),
-  "watch_for": ["string - symptom names"],
-  "reasoning": "string",
-  "preventive_actions": ["string"]
-}
-
-Data:
-${contextBlock}`
-      }]
-    }]
-  })
-
-  const predictionText = predictionResult.response.text()
-
-  interface PredictionData {
-    flare_risk_level?: string
-    confidence?: number
-    watch_for?: string[]
-    reasoning?: string
-    preventive_actions?: string[]
-  }
-
-  let predictionData: PredictionData = {}
-  try {
-    const match = predictionText.match(/\{[\s\S]*\}/)
-    predictionData = JSON.parse(match ? match[0] : predictionText)
-  } catch {
-    console.error(`[cron/daily-insights] failed to parse prediction JSON for user ${userId}`)
-  }
-
-  // Upsert prediction insight
-  await service.from('daily_insights').upsert(
-    {
-      user_id: userId,
-      date: tomorrow,
-      window_type: 'prediction',
-      summary: null,
-      gut_score: null,
-      flare_risk_level: predictionData.flare_risk_level ?? null,
-      key_observations: [],
-      recommendations: predictionData.preventive_actions ?? [],
-      prediction: predictionData as Record<string, unknown>,
-      generated_at: new Date().toISOString(),
-    },
-    { onConflict: 'user_id,date,window_type' }
-  )
+  await service.from('daily_insights').upsert({
+    user_id: userId,
+    date: yesterday,
+    window_type: 'daily',
+    generated_at: new Date().toISOString(),
+    flare_risk_level: flareRisk?.level ?? null,
+    flare_risk_reason: flareRisk?.reason ?? null,
+    contributing_factors: flareRisk?.contributing_factors ?? [],
+    what_happened: parsed.what_happened ?? null,
+    avoid: parsed.avoid_today ?? [],
+    add_to_diet: parsed.add_to_diet_today ?? [],
+    patterns: parsed.patterns ?? [],
+    prediction: { ...forecast, watch_for: parsed.watch_for },
+    prediction_confidence: forecast?.confidence_percent ?? null,
+  }, { onConflict: 'user_id,date,window_type' })
 }
 
 export async function GET(req: NextRequest) {
@@ -259,14 +187,17 @@ export async function GET(req: NextRequest) {
         }
 
         // Sync Oura data for yesterday and today
-        const ouraClient = new OuraClient(user.user_metadata.oura_token as string)
-        await Promise.allSettled([
-          ouraClient.syncToSupabase(user.id, yesterday),
-          ouraClient.syncToSupabase(user.id, today),
-        ])
+        const ouraToken = user.user_metadata.oura_token as string
+        if (ouraToken) {
+          const ouraClient = new OuraClient(ouraToken)
+          await Promise.allSettled([
+            ouraClient.syncToSupabase(user.id, yesterday),
+            ouraClient.syncToSupabase(user.id, today),
+          ])
+        }
 
-        // Generate insights for today
-        await generateInsightsForUser(user.id, today, service, genAI)
+        // Generate insights
+        await generateInsightsForUser(user.id, user.user_metadata, service, genAI)
 
         processed++
       } catch (err) {

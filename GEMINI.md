@@ -17,5 +17,5 @@ GutTrack is a personal health AI for post-giardia recovery and IgA nephropathy t
 - Critical tables: `meal_logs`, `oura_metrics`, `workout_logs`, `daily_insights`, `daily_feedback`.
 
 ## AI Implementation
-- Model: Prefer `gemini-1.5-flash-latest` (due to current quota restrictions on 2.0-flash).
+- Model: Prefer `gemini-flash-latest` (verified working).
 - Prompts: Use structured JSON responses. Validate AI output with schema-like checks.
