@@ -25,7 +25,6 @@ export default function AuthPage() {
       email,
       options: { 
         shouldCreateUser: true,
-        emailRedirectTo: `${window.location.origin}/auth/callback`
       },
     });
     setLoading(false);
