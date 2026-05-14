@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
-import { GoogleGenerativeAI } from '@google/generative-ai'
+import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai'
 import { getMtnDate } from '@/lib/dates'
 import type { MealLog, DailyFeedback } from '@/lib/supabase'
 
@@ -173,10 +173,10 @@ export async function POST() {
     const model = genAI.getGenerativeModel({
       model: 'gemini-flash-latest',
       safetySettings: [
-        { category: 'HARM_CATEGORY_HARASSMENT' as any, threshold: 'BLOCK_NONE' as any },
-        { category: 'HARM_CATEGORY_HATE_SPEECH' as any, threshold: 'BLOCK_NONE' as any },
-        { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT' as any, threshold: 'BLOCK_NONE' as any },
-        { category: 'HARM_CATEGORY_DANGEROUS_CONTENT' as any, threshold: 'BLOCK_NONE' as any },
+        { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
       ],
       systemInstruction: `You are a personalized gut health prediction engine. You have today's Oura biometrics, recent meal patterns, and this person's history of predictions versus actual outcomes. Your job is to forecast tomorrow's gut health. Use the feedback accuracy history to calibrate — if you previously over-predicted flares adjust downward. If certain food and stress signal combinations reliably triggered symptoms weight those heavily. Return only valid JSON.`,
     })
@@ -228,12 +228,13 @@ ${promptSections}${coldStartNote}`)
     })
 
     return NextResponse.json(parsed)
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Predict insights error:', error)
+    const message = error instanceof Error ? error.message : String(error)
     return NextResponse.json(
       { 
         error: 'Failed to generate prediction',
-        message: error.message || String(error)
+        message
       },
       { status: 500 }
     )

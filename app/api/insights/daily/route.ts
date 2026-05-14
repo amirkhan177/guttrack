@@ -108,7 +108,7 @@ export async function POST() {
       }
       try {
         parsed = JSON.parse(match[0])
-      } catch (e2) {
+      } catch {
         return NextResponse.json({ 
           error: 'Failed to parse AI response (regex match failed)',
           details: match[0].slice(0, 100)
@@ -137,11 +137,12 @@ export async function POST() {
     }, { onConflict: 'user_id,date,window_type' })
 
     return NextResponse.json(parsed)
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Daily insights error:', error)
+    const message = error instanceof Error ? error.message : String(error)
     return NextResponse.json({ 
       error: 'Failed to generate insights',
-      message: error.message || String(error)
+      message
     }, { status: 500 })
   }
 }
