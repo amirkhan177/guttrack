@@ -105,15 +105,15 @@ async function generateInsightsForUser(
   ])
 
   const insightsData: InsightsData = {
-    mealsYest: (mealsYestResult.status === 'fulfilled' ? mealsYestResult.value.data as MealLog[] : []) ?? [],
-    mealsToday: (mealsTodayResult.status === 'fulfilled' ? mealsTodayResult.value.data as MealLog[] : []) ?? [],
-    oura: (ouraResult.status === 'fulfilled' ? ouraResult.value.data as OuraMetrics : null),
-    feedback: (feedbackResult.status === 'fulfilled' ? feedbackResult.value.data as DailyFeedback[] : []) ?? [],
-    weight: (weightResult.status === 'fulfilled' ? weightResult.value.data as WeightEntry[] : []) ?? [],
-    suppTaken: (suppTakenResult.status === 'fulfilled' ? suppTakenResult.value.data as (SupplementLog & { supplements: Supplement })[] : []) ?? [],
-    suppScheduled: (suppScheduledResult.status === 'fulfilled' ? suppScheduledResult.value.data as Supplement[] : []) ?? [],
-    workouts: (workoutsResult.status === 'fulfilled' ? workoutsResult.value.data as WorkoutLog[] : []) ?? [],
-    labs: (labsResult.status === 'fulfilled' ? labsResult.value.data as LabResult[] : []) ?? [],
+    mealsYest: (mealsYestResult.data as MealLog[]) ?? [],
+    mealsToday: (mealsTodayResult.data as MealLog[]) ?? [],
+    oura: ouraResult.data as OuraMetrics,
+    feedback: (feedbackResult.data as DailyFeedback[]) ?? [],
+    weight: (weightResult.data as WeightEntry[]) ?? [],
+    suppTaken: (suppTakenResult.data as (SupplementLog & { supplements: Supplement })[]) ?? [],
+    suppScheduled: (suppScheduledResult.data as Supplement[]) ?? [],
+    workouts: (workoutsResult.data as WorkoutLog[]) ?? [],
+    labs: (labsResult.data as LabResult[]) ?? [],
     userMetadata: userMetadata
   }
 
