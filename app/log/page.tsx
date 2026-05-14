@@ -343,9 +343,10 @@ export default function LogPage() {
         setShowSuccess(false);
         resetMeal();
       }, 1600);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Save meal error:", err);
-      setAnalyzeError(err.message || "Could not save meal. Please try again.");
+      const message = err instanceof Error ? err.message : "Could not save meal. Please try again.";
+      setAnalyzeError(message);
     } finally {
       setSaving(false);
     }
