@@ -172,6 +172,12 @@ export async function POST() {
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '')
     const model = genAI.getGenerativeModel({
       model: 'gemini-flash-latest',
+      safetySettings: [
+        { category: 'HARM_CATEGORY_HARASSMENT' as any, threshold: 'BLOCK_NONE' as any },
+        { category: 'HARM_CATEGORY_HATE_SPEECH' as any, threshold: 'BLOCK_NONE' as any },
+        { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT' as any, threshold: 'BLOCK_NONE' as any },
+        { category: 'HARM_CATEGORY_DANGEROUS_CONTENT' as any, threshold: 'BLOCK_NONE' as any },
+      ],
       systemInstruction: `You are a personalized gut health prediction engine. You have today's Oura biometrics, recent meal patterns, and this person's history of predictions versus actual outcomes. Your job is to forecast tomorrow's gut health. Use the feedback accuracy history to calibrate — if you previously over-predicted flares adjust downward. If certain food and stress signal combinations reliably triggered symptoms weight those heavily. Return only valid JSON.`,
     })
 
@@ -192,9 +198,10 @@ ${promptSections}${coldStartNote}`)
     try {
       const match = rawText.match(/\{[\s\S]*\}/)
       parsed = JSON.parse(match ? match[0] : rawText)
-    } catch {
+    } catch (e) {
+      console.error(`[api/insights/predict] JSON parse error: ${e}. Raw text: ${rawText}`)
       return NextResponse.json(
-        { error: 'Failed to parse AI response as JSON' },
+        { error: 'Failed to parse AI response as JSON', details: rawText.slice(0, 100) },
         { status: 500 }
       )
     }
@@ -221,10 +228,13 @@ ${promptSections}${coldStartNote}`)
     })
 
     return NextResponse.json(parsed)
-  } catch (error) {
+  } catch (error: any) {
     console.error('Predict insights error:', error)
     return NextResponse.json(
-      { error: 'Failed to generate prediction' },
+      { 
+        error: 'Failed to generate prediction',
+        message: error.message || String(error)
+      },
       { status: 500 }
     )
   }

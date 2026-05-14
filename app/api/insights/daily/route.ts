@@ -97,10 +97,23 @@ export async function POST() {
     let parsed: Record<string, unknown>
     try {
       parsed = JSON.parse(rawText)
-    } catch {
+    } catch (e) {
+      console.error(`[api/insights/daily] JSON parse error: ${e}. Raw text: ${rawText}`)
       const match = rawText.match(/\{[\s\S]*\}/)
-      if (!match) return NextResponse.json({ error: 'Failed to parse AI response' }, { status: 500 })
-      parsed = JSON.parse(match[0])
+      if (!match) {
+        return NextResponse.json({ 
+          error: 'Failed to parse AI response',
+          details: rawText.slice(0, 100) 
+        }, { status: 500 })
+      }
+      try {
+        parsed = JSON.parse(match[0])
+      } catch (e2) {
+        return NextResponse.json({ 
+          error: 'Failed to parse AI response (regex match failed)',
+          details: match[0].slice(0, 100)
+        }, { status: 500 })
+      }
     }
 
     const flareRisk = parsed.flare_risk as Record<string, unknown>
@@ -124,9 +137,12 @@ export async function POST() {
     }, { onConflict: 'user_id,date,window_type' })
 
     return NextResponse.json(parsed)
-  } catch (error) {
+  } catch (error: any) {
     console.error('Daily insights error:', error)
-    return NextResponse.json({ error: 'Failed to generate insights' }, { status: 500 })
+    return NextResponse.json({ 
+      error: 'Failed to generate insights',
+      message: error.message || String(error)
+    }, { status: 500 })
   }
 }
 

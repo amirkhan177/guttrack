@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai'
+import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai'
 import { MealLog, OuraMetrics, WorkoutLog, LabResult, Supplement, SupplementLog, WeightEntry, DailyFeedback } from './supabase'
 
 export const INSIGHTS_MODEL = 'gemini-flash-latest'
@@ -129,6 +129,24 @@ export function constructInsightsPrompt(data: InsightsData): string {
 export async function generateDailyInsights(genAI: GoogleGenerativeAI, promptData: string) {
   const model = genAI.getGenerativeModel({
     model: INSIGHTS_MODEL,
+    safetySettings: [
+      {
+        category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+        threshold: HarmBlockThreshold.BLOCK_NONE,
+      },
+      {
+        category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+        threshold: HarmBlockThreshold.BLOCK_NONE,
+      },
+      {
+        category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+        threshold: HarmBlockThreshold.BLOCK_NONE,
+      },
+      {
+        category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+        threshold: HarmBlockThreshold.BLOCK_NONE,
+      },
+    ],
     systemInstruction: `You are a personal gut health AI specializing in post-giardia gut recovery and IgA nephropathy kidney protection.
 
 You receive yesterday's complete health data (sleep, biometrics, workouts, meals, medications, supplements, lab results) plus a history of past prediction accuracy.
