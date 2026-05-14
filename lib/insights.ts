@@ -130,23 +130,14 @@ export async function generateDailyInsights(genAI: GoogleGenerativeAI, promptDat
   const model = genAI.getGenerativeModel({
     model: INSIGHTS_MODEL,
     safetySettings: [
-      {
-        category: HarmCategory.HARM_CATEGORY_HARASSMENT,
-        threshold: HarmBlockThreshold.BLOCK_NONE,
-      },
-      {
-        category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-        threshold: HarmBlockThreshold.BLOCK_NONE,
-      },
-      {
-        category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-        threshold: HarmBlockThreshold.BLOCK_NONE,
-      },
-      {
-        category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-        threshold: HarmBlockThreshold.BLOCK_NONE,
-      },
+      { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+      { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+      { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+      { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
     ],
+    generationConfig: {
+      responseMimeType: 'application/json',
+    },
     systemInstruction: `You are a personal gut health AI specializing in post-giardia gut recovery and IgA nephropathy kidney protection.
 
 You receive yesterday's complete health data (sleep, biometrics, workouts, meals, medications, supplements, lab results) plus a history of past prediction accuracy.
@@ -159,32 +150,32 @@ Use the feedback accuracy history to calibrate — correct for past over or unde
 Return ONLY valid JSON. Zero markdown.`,
   })
 
-  return model.generateContent(`Analyze yesterday's data and forecast today. Return this exact JSON:
+  return model.generateContent(`Analyze yesterday's data and forecast today. Return JSON matching this structure:
 {
   "summary": {
-    "gut_score": <int 0-100>,
-    "readiness_label": <string e.g. "Well Rested">,
-    "sleep_quality": <string e.g. "Deep sleep low">,
-    "stress_level": <string e.g. "Elevated">,
-    "one_line": <string — single sentence summary of yesterday>
+    "gut_score": number,
+    "readiness_label": "string",
+    "sleep_quality": "string",
+    "stress_level": "string",
+    "one_line": "string"
   },
   "flare_risk": {
-    "level": <"None"|"Low"|"Moderate"|"High"|"Critical">,
-    "reason": <specific paragraph referencing actual signals>,
-    "contributing_factors": <string[]>
+    "level": "None"|"Low"|"Moderate"|"High"|"Critical",
+    "reason": "string",
+    "contributing_factors": ["string"]
   },
-  "what_happened": <plain English narrative — connect food, sleep, stress, symptoms>,
-  "symptoms": <string[] — symptoms logged>,
+  "what_happened": "string",
+  "symptoms": ["string"],
   "today_forecast": {
-    "how_youll_feel": <paragraph — how gut will likely feel today based on yesterday's signals>,
-    "flare_risk_level": <"None"|"Low"|"Moderate"|"High"|"Critical">,
-    "confidence_percent": <int 0-100>,
-    "reasoning": <why this forecast — reference specific signals>
+    "how_youll_feel": "string",
+    "flare_risk_level": "None"|"Low"|"Moderate"|"High"|"Critical",
+    "confidence_percent": number,
+    "reasoning": "string"
   },
-  "avoid_today": [{ "label": <string>, "reason": <string>, "duration": <string> }],
-  "add_to_diet_today": [{ "label": <string>, "reason": <string>, "timing": <string e.g. "with lunch"> }],
-  "watch_for": <string[] — symptom signals to monitor today>,
-  "patterns": <string[] — recurring patterns detected across history>
+  "avoid_today": [{ "label": "string", "reason": "string", "duration": "string" }],
+  "add_to_diet_today": [{ "label": "string", "reason": "string", "timing": "string" }],
+  "watch_for": ["string"],
+  "patterns": ["string"]
 }
 
 DATA:

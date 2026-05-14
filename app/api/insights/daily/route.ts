@@ -92,6 +92,15 @@ export async function POST() {
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '')
     const result = await generateDailyInsights(genAI, promptData)
     const response = await result.response
+    
+    if (!response.candidates || response.candidates.length === 0) {
+      console.error('[api/insights/daily] No candidates in response. Feedback:', response.promptFeedback)
+      return NextResponse.json({ 
+        error: 'AI response was empty or blocked',
+        details: response.promptFeedback 
+      }, { status: 500 })
+    }
+
     const rawText = response.text()
 
     let parsed: Record<string, unknown>
