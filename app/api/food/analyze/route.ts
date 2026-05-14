@@ -37,9 +37,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Description required' }, { status: 400 })
     }
 
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '')
+    const apiKey = process.env.GEMINI_API_KEY
+    if (!apiKey) {
+      console.error('GEMINI_API_KEY is not set')
+      return NextResponse.json({ error: 'API configuration error' }, { status: 500 })
+    }
+
+    const genAI = new GoogleGenerativeAI(apiKey)
     const model = genAI.getGenerativeModel({
-      model: 'gemini-2.0-flash',
+      model: 'gemini-1.5-flash-latest',
+      generationConfig: {
+        responseMimeType: 'application/json',
+      },
       systemInstruction: `You are a gut health nutrition analyst specializing in post-giardia gut recovery and IgA nephropathy kidney protection.
 Given a food description, map it to structured fields and provide gut-specific analysis.
 
@@ -47,30 +56,31 @@ PROTEIN options (pick the single closest match): Chicken, Fish, Eggs, Red Meat, 
 CARBS options (pick the single closest match): White Rice, Bread, Pasta, Cooked Vegetables, Leafy Greens, Legumes/Beans, Oats, None
 SPICE options (pick one): None, Mild, Medium, Hot, Very Hot
 
-Return ONLY valid JSON, no markdown.`,
-    })
-
-    const result = await model.generateContent(`Analyze this food for gut health impact: "${description}"
-
 Return JSON with exactly this structure:
 {
-  "protein": "<one of the protein options>",
-  "carbs": "<one of the carbs options>",
-  "spice": "<one of the spice options>",
-  "gut_notes": "<2-3 sentence plain English summary of gut impact — fermentability, motility effects, inflammation potential>",
-  "fiber_level": "<high|moderate|low>",
-  "key_nutrients": ["<nutrient 1>", "<nutrient 2>"],
-  "gut_cautions": ["<caution if any, else empty array>"],
-  "ibs_trigger_risk": "<low|moderate|high>",
-  "kidney_notes": "<one sentence on potassium/phosphorus/protein load relevant to IgA nephropathy>"
-}`)
+  "protein": "string",
+  "carbs": "string",
+  "spice": "string",
+  "gut_notes": "string",
+  "fiber_level": "high" | "moderate" | "low",
+  "key_nutrients": ["string"],
+  "gut_cautions": ["string"],
+  "ibs_trigger_risk": "low" | "moderate" | "high",
+  "kidney_notes": "string"
+}`,
+    })
 
-    const raw = result.response.text()
+    console.log(`[food/analyze] analyzing: ${description}`)
+    const result = await model.generateContent(`Analyze this food for gut health impact: "${description}"`)
+    const response = await result.response
+    const raw = response.text()
+    console.log(`[food/analyze] raw response: ${raw}`)
 
     let parsed: FoodAnalysis
     try {
       parsed = JSON.parse(raw)
-    } catch {
+    } catch (e) {
+      console.error(`[food/analyze] JSON parse error: ${e}. Raw text: ${raw}`)
       const match = raw.match(/\{[\s\S]*\}/)
       if (!match) throw new Error('No JSON in response')
       parsed = JSON.parse(match[0])

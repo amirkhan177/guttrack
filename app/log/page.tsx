@@ -313,6 +313,7 @@ export default function LogPage() {
     touch();
     if (!feeling) return;
     setSaving(true);
+    setAnalyzeError(null); // Reuse analyze error for simplicity or add a new one
     try {
       const supabase = createSupabaseBrowserClient();
       const {
@@ -322,7 +323,7 @@ export default function LogPage() {
         router.replace("/pin");
         return;
       }
-      await supabase.from("meal_logs").insert({
+      const { error } = await supabase.from("meal_logs").insert({
         timestamp: new Date().toISOString(),
         meal_type: mealType,
         protein,
@@ -334,11 +335,17 @@ export default function LogPage() {
         user_id: user.id,
         food_description: foodDescription || null,
       });
+
+      if (error) throw error;
+
       setShowSuccess(true);
       setTimeout(() => {
         setShowSuccess(false);
         resetMeal();
       }, 1600);
+    } catch (err: any) {
+      console.error("Save meal error:", err);
+      setAnalyzeError(err.message || "Could not save meal. Please try again.");
     } finally {
       setSaving(false);
     }

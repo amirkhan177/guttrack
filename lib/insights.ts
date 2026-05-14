@@ -1,7 +1,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { MealLog, OuraMetrics, WorkoutLog, LabResult, Supplement, SupplementLog, WeightEntry, DailyFeedback } from './supabase'
 
-export const INSIGHTS_MODEL = 'gemini-2.0-flash'
+export const INSIGHTS_MODEL = 'gemini-1.5-flash-latest'
 
 export function getFiberLevel(carbs: string | null): string {
   if (!carbs) return 'low'
