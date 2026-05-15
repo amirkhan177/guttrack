@@ -10,6 +10,7 @@ import { OuraMetrics } from '@/src/core/entities/OuraMetrics';
 import { DailyFeedback } from '@/src/core/entities/DailyFeedback';
 import { DailyInsight } from '@/src/core/entities/Insight';
 import { Supplement } from '@/src/core/entities/Supplement';
+import { PIIScrubber } from '@/src/core/logic/PIIScrubber';
 
 interface PredictPromptData {
   oura: OuraMetrics | null;
@@ -58,15 +59,16 @@ export class PredictGutHealthUseCase {
     const filteredAnalysisHistory = insightHistory.filter(i => i.window_type === 'analysis');
 
     // 2. Construct prompt
-    const prompt = this.constructPrompt({
+    const rawPrompt = this.constructPrompt({
       oura,
       mealsToday,
       mealsYest,
       feedback,
       insightHistory: filteredAnalysisHistory,
       medications: filteredMeds,
-      userMetadata
+      userMetadata: PIIScrubber.scrubMetadata(userMetadata)
     });
+    const prompt = PIIScrubber.scrubString(rawPrompt);
 
     // 3. Generate via AI
     const prediction = await this.aiService.predictFutureHealth(prompt);

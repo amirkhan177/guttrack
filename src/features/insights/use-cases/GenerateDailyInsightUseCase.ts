@@ -15,6 +15,7 @@ import { WeightEntry } from '@/src/core/entities/WeightEntry';
 import { Supplement, SupplementLog } from '@/src/core/entities/Supplement';
 import { WorkoutLog } from '@/src/core/entities/WorkoutLog';
 import { LabResult } from '@/src/core/entities/LabResult';
+import { PIIScrubber } from '@/src/core/logic/PIIScrubber';
 
 interface PromptData {
   mealsYest: Meal[];
@@ -80,7 +81,7 @@ export class GenerateDailyInsightUseCase {
     ]);
 
     // 2. Construct prompt
-    const promptData = this.constructPrompt({
+    const rawPrompt = this.constructPrompt({
       mealsYest: mealsCompletedCycle,
       mealsToday: [], // At 8am, we are starting today's meals
       oura,
@@ -90,8 +91,9 @@ export class GenerateDailyInsightUseCase {
       suppScheduled,
       workouts,
       labs,
-      userMetadata
+      userMetadata: PIIScrubber.scrubMetadata(userMetadata)
     });
+    const promptData = PIIScrubber.scrubString(rawPrompt);
 
     // 3. Generate insight via AI
     console.log('[GenerateDailyInsightUseCase] Calling AI...');

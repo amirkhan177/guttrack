@@ -1,4 +1,5 @@
 import { AIService } from '@/src/data/services/AIService';
+import { PIIScrubber } from '@/src/core/logic/PIIScrubber';
 
 export type ExtractedLab = {
   name: string;
@@ -73,6 +74,9 @@ export class ExtractLabResultsUseCase {
     const validStatuses = ['Normal', 'Elevated', 'Low', 'Unknown'];
     return parsed.labs.map((lab) => ({
       ...lab,
+      name: PIIScrubber.scrubString(lab.name),
+      value: PIIScrubber.scrubString(lab.value),
+      reference_range: PIIScrubber.scrubString(lab.reference_range),
       status: validStatuses.includes(lab.status)
         ? (lab.status as ExtractedLab['status'])
         : 'Unknown',
