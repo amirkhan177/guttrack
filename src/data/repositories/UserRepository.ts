@@ -10,8 +10,35 @@ export interface UserRecord {
   } & Record<string, unknown>;
 }
 
+export interface Profile {
+  id: string;
+  full_name: string | null;
+  phone: string | null;
+  role: 'user' | 'admin' | 'clinician';
+  avatar_url: string | null;
+}
+
 export class UserRepository {
   private supabase = createSupabaseServiceClient();
+
+  async getProfile(userId: string): Promise<Profile | null> {
+    const { data, error } = await this.supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .single();
+
+    if (error) return null;
+    return data as Profile;
+  }
+
+  async updateProfile(userId: string, data: Partial<Profile>): Promise<void> {
+    const { error } = await this.supabase
+      .from('profiles')
+      .update(data)
+      .eq('id', userId);
+    if (error) throw error;
+  }
 
   async listOuraUsers(): Promise<UserRecord[]> {
     const { data: { users }, error } = await this.supabase.auth.admin.listUsers();

@@ -9,47 +9,71 @@ const serif = "Georgia, serif";
 
 export default function AuthPage() {
   const router = useRouter();
+  const [method, setMethod] = useState<"email" | "phone">("phone");
   const [email, setEmail] = useState("");
-  const [step, setStep] = useState<"email" | "code">("email");
-  const [code, setCode] = useState(["", "", "", "", "", "", "", ""]);
+  const [phone, setPhone] = useState("");
+  const [step, setStep] = useState<"identifier" | "code">("identifier");
+  const [code, setCode] = useState(["", "", "", "", "", ""]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  const codeLength = method === "email" ? 8 : 6;
 
   async function handleSendCode(e: React.FormEvent) {
     e.preventDefault();
     setError("");
     setLoading(true);
     const supabase = createSupabaseBrowserClient();
-    const { error: err } = await supabase.auth.signInWithOtp({
-      email,
-      options: { 
-        shouldCreateUser: true,
-      },
-    });
-    setLoading(false);
-    if (err) {
-      setError(err.message);
+    
+    let result;
+    if (method === "email") {
+      result = await supabase.auth.signInWithOtp({
+        email,
+        options: { shouldCreateUser: true },
+      });
     } else {
+      result = await supabase.auth.signInWithOtp({
+        phone,
+        options: { shouldCreateUser: true },
+      });
+    }
+
+    setLoading(false);
+    if (result.error) {
+      setError(result.error.message);
+    } else {
+      setCode(new Array(codeLength).fill(""));
       setStep("code");
     }
   }
 
   async function handleVerify() {
     const token = code.join("");
-    if (token.length < 8) return;
+    if (token.length < codeLength) return;
     setError("");
     setLoading(true);
     const supabase = createSupabaseBrowserClient();
-    const { error: err } = await supabase.auth.verifyOtp({
-      email,
-      token,
-      type: "email",
-    });
+    
+    let result;
+    if (method === "email") {
+      result = await supabase.auth.verifyOtp({
+        email,
+        token,
+        type: "email",
+      });
+    } else {
+      result = await supabase.auth.verifyOtp({
+        phone,
+        token,
+        type: "sms",
+      });
+    }
+
     setLoading(false);
-    if (err) {
+    if (result.error) {
       setError("Invalid code. Try again.");
-      setCode(["", "", "", "", "", "", "", ""]);
+      setCode(new Array(codeLength).fill(""));
       inputRefs.current[0]?.focus();
     } else {
       router.replace("/pin");
@@ -61,25 +85,12 @@ export default function AuthPage() {
     const next = [...code];
     next[index] = digit;
     setCode(next);
-    if (digit && index < 7) {
+    if (digit && index < codeLength - 1) {
       inputRefs.current[index + 1]?.focus();
     }
     if (next.every((d) => d !== "")) {
-      // auto-submit when all 8 filled
-      const token = next.join("");
-      setLoading(true);
-      setError("");
-      const supabase = createSupabaseBrowserClient();
-      supabase.auth.verifyOtp({ email, token, type: "email" }).then(({ error: err }) => {
-        setLoading(false);
-        if (err) {
-          setError("Invalid code. Try again.");
-          setCode(["", "", "", "", "", "", "", ""]);
-          inputRefs.current[0]?.focus();
-        } else {
-          router.replace("/pin");
-        }
-      });
+      // auto-submit when all filled
+      handleVerify();
     }
   }
 
@@ -91,12 +102,12 @@ export default function AuthPage() {
 
   function handlePaste(e: React.ClipboardEvent) {
     e.preventDefault();
-    const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 8);
+    const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, codeLength);
     if (!pasted) return;
     const next = [...code];
-    for (let i = 0; i < 8; i++) next[i] = pasted[i] ?? "";
+    for (let i = 0; i < codeLength; i++) next[i] = pasted[i] ?? "";
     setCode(next);
-    const lastFilled = Math.min(pasted.length, 7);
+    const lastFilled = Math.min(pasted.length, codeLength - 1);
     inputRefs.current[lastFilled]?.focus();
   }
 
@@ -113,30 +124,94 @@ export default function AuthPage() {
           </p>
         </div>
 
-        {step === "email" ? (
+        {step === "identifier" ? (
           <form onSubmit={handleSendCode} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="your@email.com"
-              required
-              autoFocus
-              style={{
-                width: "100%",
-                padding: "14px 16px",
-                borderRadius: 14,
-                border: "1.5px solid #1e1e2e",
-                background: "#15151f",
-                color: "#e8e8f0",
-                fontFamily: mono,
-                fontSize: 14,
-                outline: "none",
-                boxSizing: "border-box",
-              }}
-              onFocus={(e) => (e.target.style.borderColor = "#7EB8A4")}
-              onBlur={(e) => (e.target.style.borderColor = "#1e1e2e")}
-            />
+            <div style={{ display: "flex", background: "#15151f", borderRadius: 12, padding: 4, marginBottom: 8 }}>
+              <button
+                type="button"
+                onClick={() => setMethod("phone")}
+                style={{
+                  flex: 1,
+                  padding: "8px",
+                  borderRadius: 10,
+                  border: "none",
+                  background: method === "phone" ? "#1e1e2e" : "transparent",
+                  color: method === "phone" ? "#7EB8A4" : "#555",
+                  fontFamily: mono,
+                  fontSize: 10,
+                  cursor: "pointer",
+                  transition: "all 0.2s",
+                }}
+              >
+                SMS
+              </button>
+              <button
+                type="button"
+                onClick={() => setMethod("email")}
+                style={{
+                  flex: 1,
+                  padding: "8px",
+                  borderRadius: 10,
+                  border: "none",
+                  background: method === "email" ? "#1e1e2e" : "transparent",
+                  color: method === "email" ? "#7EB8A4" : "#555",
+                  fontFamily: mono,
+                  fontSize: 10,
+                  cursor: "pointer",
+                  transition: "all 0.2s",
+                }}
+              >
+                EMAIL
+              </button>
+            </div>
+
+            {method === "email" ? (
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="your@email.com"
+                required
+                autoFocus
+                style={{
+                  width: "100%",
+                  padding: "14px 16px",
+                  borderRadius: 14,
+                  border: "1.5px solid #1e1e2e",
+                  background: "#15151f",
+                  color: "#e8e8f0",
+                  fontFamily: mono,
+                  fontSize: 14,
+                  outline: "none",
+                  boxSizing: "border-box",
+                }}
+                onFocus={(e) => (e.target.style.borderColor = "#7EB8A4")}
+                onBlur={(e) => (e.target.style.borderColor = "#1e1e2e")}
+              />
+            ) : (
+              <input
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="+15551234567"
+                required
+                autoFocus
+                style={{
+                  width: "100%",
+                  padding: "14px 16px",
+                  borderRadius: 14,
+                  border: "1.5px solid #1e1e2e",
+                  background: "#15151f",
+                  color: "#e8e8f0",
+                  fontFamily: mono,
+                  fontSize: 14,
+                  outline: "none",
+                  boxSizing: "border-box",
+                }}
+                onFocus={(e) => (e.target.style.borderColor = "#7EB8A4")}
+                onBlur={(e) => (e.target.style.borderColor = "#1e1e2e")}
+              />
+            )}
 
             {error && (
               <p style={{ fontFamily: mono, fontSize: 11, color: "#FF6B6B", textAlign: "center" }}>{error}</p>
@@ -144,7 +219,7 @@ export default function AuthPage() {
 
             <button
               type="submit"
-              disabled={loading || !email}
+              disabled={loading || (method === "email" ? !email : !phone)}
               style={{
                 width: "100%",
                 padding: "14px",
@@ -155,8 +230,8 @@ export default function AuthPage() {
                 fontFamily: mono,
                 fontSize: 12,
                 letterSpacing: "0.12em",
-                cursor: loading || !email ? "not-allowed" : "pointer",
-                opacity: loading || !email ? 0.4 : 1,
+                cursor: loading || (method === "email" ? !email : !phone) ? "not-allowed" : "pointer",
+                opacity: loading || (method === "email" ? !email : !phone) ? 0.4 : 1,
               }}
             >
               {loading ? "SENDING..." : "SEND CODE"}
@@ -168,10 +243,10 @@ export default function AuthPage() {
               <p style={{ fontFamily: mono, fontSize: 11, color: "#7EB8A4", letterSpacing: "0.1em", marginBottom: 4 }}>
                 CODE SENT TO
               </p>
-              <p style={{ fontFamily: mono, fontSize: 12, color: "#888" }}>{email}</p>
+              <p style={{ fontFamily: mono, fontSize: 12, color: "#888" }}>{method === "email" ? email : phone}</p>
             </div>
 
-            {/* 8-digit input */}
+            {/* OTP input */}
             <div style={{ display: "flex", gap: 6 }} onPaste={handlePaste}>
               {code.map((digit, i) => (
                 <input
@@ -185,7 +260,7 @@ export default function AuthPage() {
                   onKeyDown={(e) => handleCodeKeyDown(i, e)}
                   autoFocus={i === 0}
                   style={{
-                    width: 36,
+                    width: method === "email" ? 34 : 44,
                     height: 52,
                     textAlign: "center",
                     borderRadius: 10,
@@ -228,7 +303,7 @@ export default function AuthPage() {
             </button>
 
             <button
-              onClick={() => { setStep("email"); setCode(["", "", "", "", "", "", "", ""]); setError(""); }}
+              onClick={() => { setStep("identifier"); setCode(new Array(codeLength).fill("")); setError(""); }}
               style={{
                 background: "transparent",
                 border: "none",
@@ -239,7 +314,7 @@ export default function AuthPage() {
                 letterSpacing: "0.06em",
               }}
             >
-              ← use different email
+              ← use different {method}
             </button>
           </div>
         )}
