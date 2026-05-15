@@ -21,10 +21,11 @@ CREATE POLICY "Profiles are updatable by owner" ON profiles FOR UPDATE USING (au
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger AS $$
 BEGIN
-  INSERT INTO public.profiles (id, full_name, phone)
+  INSERT INTO public.profiles (id, full_name, avatar_url, phone)
   VALUES (
     new.id,
-    new.raw_user_meta_data->>'full_name',
+    COALESCE(new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'name'),
+    new.raw_user_meta_data->>'avatar_url',
     new.phone
   );
   RETURN new;
