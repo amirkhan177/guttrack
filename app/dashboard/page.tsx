@@ -1,52 +1,49 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 
-import { createSupabaseBrowserClient } from "@/lib/supabase";
-import type {
-  MealLog,
-  WeightEntry,
-  OuraMetrics,
-  DailyInsight,
-  Supplement,
-  SupplementLog,
-} from "@/lib/supabase";
 import { calculateGutScore } from "@/lib/gutScore";
-import { isSessionExpired, refreshActivity } from "@/lib/crypto";
 import { useFeedbackModal } from "@/contexts/FeedbackModalContext";
-import NavBar from "@/components/NavBar";
+import NavBar from "@/src/shared/components/NavBar";
+import { Supplement } from "@/src/core/entities/Supplement";
 
 // New Components
-import SkeletonCard from "@/components/dashboard/SkeletonCard";
-import InsightPreview from "@/components/dashboard/InsightPreview";
-import GutScoreCard from "@/components/dashboard/GutScoreCard";
-import OuraRingSection from "@/components/dashboard/OuraRingSection";
-import WeightSection from "@/components/dashboard/WeightSection";
-import MealsSection from "@/components/dashboard/MealsSection";
-import SupplementsSection from "@/components/dashboard/SupplementsSection";
+import SkeletonCard from "@/src/features/dashboard/components/SkeletonCard";
+import InsightPreview from "@/src/features/dashboard/components/InsightPreview";
+import GutScoreCard from "@/src/features/dashboard/components/GutScoreCard";
+import OuraRingSection from "@/src/features/dashboard/components/OuraRingSection";
+import WeightSection from "@/src/features/dashboard/components/WeightSection";
+import MealsSection from "@/src/features/dashboard/components/MealsSection";
+import SupplementsSection from "@/src/features/dashboard/components/SupplementsSection";
+
+// Hooks
+import { useDashboardData } from "@/src/features/dashboard/hooks/useDashboardData";
+import { useSessionGuard } from "@/src/features/auth/hooks/useSessionGuard";
 
 // Helpers
-import { getMtnDate, getMtnDateTimeRange } from "@/lib/dates";
 import { getGreeting, monoSmall } from "@/lib/dashboard-helpers";
+import { getMtnDate } from "@/lib/dates";
 
 export default function DashboardPage() {
-  const router = useRouter();
   const { openFeedbackModal } = useFeedbackModal();
+  const { handleInteraction, checkSession } = useSessionGuard();
+  const {
+    meals,
+    oura,
+    insight,
+    weights,
+    supplements,
+    supplementLogs,
+    hasFeedback,
+    loading,
+    weightUnit,
+    ouraLastSync,
+    setOuraLastSync,
+    refresh
+  } = useDashboardData();
 
-  // Data state
-  const [meals, setMeals] = useState<MealLog[]>([]);
-  const [oura, setOura] = useState<OuraMetrics | null>(null);
-  const [insight, setInsight] = useState<DailyInsight | null>(null);
-  const [weights, setWeights] = useState<WeightEntry[]>([]);
-  const [supplements, setSupplements] = useState<Supplement[]>([]);
-  const [supplementLogs, setSupplementLogs] = useState<SupplementLog[]>([]);
-  const [hasFeedback, setHasFeedback] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
-  const [weightUnit, setWeightUnit] = useState<"kg" | "lbs">("kg");
-  const [ouraLastSync, setOuraLastSync] = useState<string | null>(null);
 
   // Pull-to-refresh state
   const touchStartY = useRef<number | null>(null);
@@ -56,143 +53,10 @@ export default function DashboardPage() {
   // Session guard
   // ---------------------------------------------------------------------------
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const pin = sessionStorage.getItem("gut_pin");
-    if (!pin || isSessionExpired()) {
-      router.replace("/pin");
-      return;
-    }
-    refreshActivity();
-
-    const interval = setInterval(() => {
-      if (isSessionExpired()) {
-        router.replace("/pin");
-      }
-    }, 30000);
-
+    if (!checkSession()) return;
+    const interval = setInterval(checkSession, 30000);
     return () => clearInterval(interval);
-  }, [router]);
-
-  const handleInteraction = useCallback(() => {
-    if (typeof window !== "undefined") refreshActivity();
-  }, []);
-
-  // ---------------------------------------------------------------------------
-  // Load data
-  // ---------------------------------------------------------------------------
-  const loadData = useCallback(async () => {
-    const supabase = createSupabaseBrowserClient();
-    const today = getMtnDate(0);
-    const yesterday = getMtnDate(-1);
-    const { start, end } = getMtnDateTimeRange();
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      router.replace("/pin");
-      return;
-    }
-
-    const unit = (user.user_metadata?.weight_unit as "kg" | "lbs") ?? "kg";
-    setWeightUnit(unit);
-    setOuraLastSync((user.user_metadata?.oura_last_sync as string) ?? null);
-
-    const [
-      mealsRes,
-      ouraTodayRes,
-      ouraYestRes,
-      insightRes,
-      weightsRes,
-      suppsRes,
-      suppLogsRes,
-      feedbackRes,
-    ] = await Promise.all([
-      supabase
-        .from("meal_logs")
-        .select("*")
-        .eq("user_id", user.id)
-        .gte("timestamp", start)
-        .lte("timestamp", end)
-        .order("timestamp", { ascending: false }),
-
-      supabase
-        .from("oura_metrics")
-        .select("*")
-        .eq("user_id", user.id)
-        .eq("date", today)
-        .maybeSingle(),
-
-      supabase
-        .from("oura_metrics")
-        .select("*")
-        .eq("user_id", user.id)
-        .eq("date", yesterday)
-        .maybeSingle(),
-
-      supabase
-        .from("daily_insights")
-        .select("*")
-        .eq("user_id", user.id)
-        .eq("date", yesterday)
-        .eq("window_type", "daily")
-        .maybeSingle(),
-
-      supabase
-        .from("weight_entries")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("date", { ascending: false })
-        .limit(7),
-
-      supabase
-        .from("supplements")
-        .select("*")
-        .eq("user_id", user.id)
-        .eq("active", true),
-
-      supabase
-        .from("supplement_logs")
-        .select("*")
-        .eq("user_id", user.id)
-        .eq("date", today),
-
-      supabase
-        .from("daily_feedback")
-        .select("id")
-        .eq("user_id", user.id)
-        .eq("date", today)
-        .maybeSingle(),
-    ]);
-
-    const mergedOura = (() => {
-      const yest = ouraYestRes.data as OuraMetrics | null;
-      const tod = ouraTodayRes.data as OuraMetrics | null;
-      if (!yest && !tod) return null;
-      if (!yest) return tod;
-      if (!tod) return yest;
-      const merged = { ...yest };
-      for (const key of Object.keys(tod) as (keyof OuraMetrics)[]) {
-        if (tod[key] !== null && tod[key] !== undefined) {
-          (merged as Record<string, unknown>)[key] = tod[key];
-        }
-      }
-      return merged;
-    })();
-
-    setMeals((mealsRes.data as MealLog[]) ?? []);
-    setOura(mergedOura);
-    setInsight((insightRes.data as DailyInsight) ?? null);
-    setWeights((weightsRes.data as WeightEntry[]) ?? []);
-    setSupplements((suppsRes.data as Supplement[]) ?? []);
-    setSupplementLogs((suppLogsRes.data as SupplementLog[]) ?? []);
-    setHasFeedback(!!feedbackRes.data);
-    setLoading(false);
-  }, [router]);
-
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+  }, [checkSession]);
 
   // ---------------------------------------------------------------------------
   // Handlers
@@ -218,11 +82,11 @@ export default function DashboardPage() {
         } catch {
           // ignore
         }
-        await loadData();
+        await refresh();
         setSyncing(false);
       }
     },
-    [handleInteraction, loadData]
+    [handleInteraction, refresh]
   );
 
   const handleManualSync = useCallback(async () => {
@@ -235,18 +99,20 @@ export default function DashboardPage() {
     } catch {
       // ignore
     }
-    await loadData();
+    await refresh();
     setSyncing(false);
-  }, [handleInteraction, loadData]);
+  }, [handleInteraction, refresh, setOuraLastSync]);
 
   const toggleSupplement = useCallback(
     async (supp: Supplement) => {
       handleInteraction();
+      // This part still needs refactoring to a use-case or better repo call, 
+      // but for now keeping it simple to just get the page working with the new structure.
+      // Ideally this goes into a useSupplement mutation hook.
       const today = getMtnDate(0);
+      const { createSupabaseBrowserClient } = await import("@/lib/supabase");
       const supabase = createSupabaseBrowserClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
       const alreadyTaken = supplementLogs.some((l) => l.supplement_id === supp.id);
@@ -258,26 +124,19 @@ export default function DashboardPage() {
           .eq("user_id", user.id)
           .eq("supplement_id", supp.id)
           .eq("date", today);
-
-        setSupplementLogs((prev) => prev.filter((l) => l.supplement_id !== supp.id));
       } else {
-        const { data } = await supabase
+        await supabase
           .from("supplement_logs")
           .insert({
             user_id: user.id,
             supplement_id: supp.id,
             taken_at: new Date().toISOString(),
             date: today,
-          })
-          .select()
-          .single();
-
-        if (data) {
-          setSupplementLogs((prev) => [...prev, data as SupplementLog]);
-        }
+          });
       }
+      refresh();
     },
-    [supplementLogs, handleInteraction]
+    [supplementLogs, handleInteraction, refresh]
   );
 
   // ---------------------------------------------------------------------------

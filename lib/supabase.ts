@@ -9,9 +9,18 @@ export function createSupabaseBrowserClient() {
 }
 
 export function createSupabaseServiceClient() {
+  if (typeof window !== 'undefined') {
+    return createSupabaseBrowserClient();
+  }
+
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    console.warn('SUPABASE_SERVICE_ROLE_KEY is missing, falling back to anon key');
+  }
+  
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    key!,
     { auth: { persistSession: false } }
   );
 }

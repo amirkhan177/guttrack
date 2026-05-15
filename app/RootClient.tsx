@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useFeedbackModal } from "@/contexts/FeedbackModalContext";
-import FeedbackModal from "@/components/FeedbackModal";
+import FeedbackModal from "@/src/shared/components/FeedbackModal";
 
 export default function RootClient({ children }: { children: React.ReactNode }) {
   const { openFeedbackModal, isOpen, closeFeedbackModal } = useFeedbackModal();

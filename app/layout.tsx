@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { FeedbackModalProvider } from "@/contexts/FeedbackModalContext";
+import Providers from "@/src/shared/components/Providers";
 import RootClient from "./RootClient";
 
 export const metadata: Metadata = {
@@ -39,9 +40,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="apple-touch-icon" sizes="512x512" href="/icon-512.png" />
       </head>
       <body>
-        <FeedbackModalProvider>
-          <RootClient>{children}</RootClient>
-        </FeedbackModalProvider>
+        <Providers>
+          <FeedbackModalProvider>
+            <RootClient>{children}</RootClient>
+          </FeedbackModalProvider>
+        </Providers>
       </body>
     </html>
   );

@@ -1,5 +1,5 @@
 import { LineChart, Line, XAxis, Tooltip, ResponsiveContainer } from "recharts";
-import { WeightEntry } from "@/lib/supabase";
+import { WeightEntry } from "@/src/core/entities/WeightEntry";
 import { cardStyle, sectionHeadingStyle, monoSmall } from "@/lib/dashboard-helpers";
 
 interface WeightSectionProps {

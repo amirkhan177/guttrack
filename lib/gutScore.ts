@@ -1,4 +1,5 @@
-import type { MealLog, OuraMetrics } from "./supabase";
+import type { Meal } from "@/src/core/entities/Meal";
+import type { OuraMetrics } from "@/src/core/entities/OuraMetrics";
 
 const HIGH_FIBER_CARBS = new Set([
   "Leafy Greens",
@@ -8,7 +9,7 @@ const HIGH_FIBER_CARBS = new Set([
 ]);
 
 export function calculateGutScore(
-  meals: MealLog[],
+  meals: Meal[],
   oura: OuraMetrics | null
 ): number {
   let score = 80;

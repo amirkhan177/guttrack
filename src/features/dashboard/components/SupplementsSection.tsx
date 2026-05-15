@@ -1,4 +1,4 @@
-import { Supplement, SupplementLog } from "@/lib/supabase";
+import { Supplement, SupplementLog } from "@/src/core/entities/Supplement";
 import { cardStyle, sectionHeadingStyle, monoSmall } from "@/lib/dashboard-helpers";
 
 interface SupplementsSectionProps {

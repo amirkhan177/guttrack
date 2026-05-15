@@ -17,7 +17,8 @@ import {
   isSessionExpired,
   refreshActivity,
 } from "@/lib/crypto";
-import NavBar from "@/components/NavBar";
+import { getMtnCycleDate } from "@/lib/dates";
+import NavBar from "@/src/shared/components/NavBar";
 import { useFeedbackModal } from "@/contexts/FeedbackModalContext";
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
@@ -33,12 +34,6 @@ const MONO = "SF Mono, ui-monospace, monospace";
 const SERIF = "Georgia, 'Times New Roman', serif";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function getMtnYesterday(): string {
-  const d = new Date();
-  d.setDate(d.getDate() - 1);
-  return d.toLocaleDateString("en-CA", { timeZone: "America/Denver" });
-}
 
 function flareRiskColor(level: string | null): string {
   switch (level) {
@@ -77,8 +72,8 @@ function flareRiskCardStyle(level: string | null): {
 
 // ─── Typed accessors ──────────────────────────────────────────────────────────
 
-type AvoidItem = { item: string; reason: string; duration: string };
-type DietItem = { item: string; reason: string; timing: string };
+type AvoidItem = { label: string; reason: string; duration: string };
+type DietItem = { label: string; reason: string; timing: string };
 
 function getAvoid(insight: DailyInsight): AvoidItem[] {
   const raw = insight.avoid;
@@ -142,7 +137,7 @@ export default function InsightsPage() {
   const [weekScores, setWeekScores] = useState<{ date: string; score: number }[]>([]);
   const [whatHappenedOpen, setWhatHappenedOpen] = useState(false);
 
-  const yesterday = getMtnYesterday();
+  const currentCycleDate = getMtnCycleDate(0);
 
   // Session guard
   useEffect(() => {
@@ -164,12 +159,12 @@ export default function InsightsPage() {
       return;
     }
 
-    // Try daily first, then fall back to old window_types
+    // Load insight for the current cycle
     const { data: dailyRows } = await supabase
       .from("daily_insights")
       .select("*")
       .eq("user_id", user.id)
-      .eq("date", yesterday)
+      .eq("date", currentCycleDate)
       .eq("window_type", "daily")
       .order("generated_at", { ascending: false })
       .limit(1);
@@ -177,29 +172,11 @@ export default function InsightsPage() {
     if (dailyRows && dailyRows.length > 0) {
       setInsight(dailyRows[0] as DailyInsight);
     } else {
-      // Fallback to old window_types
-      const { data: fallbackRows } = await supabase
-        .from("daily_insights")
-        .select("*")
-        .eq("user_id", user.id)
-        .eq("date", yesterday)
-        .in("window_type", ["analysis", "prediction"])
-        .order("generated_at", { ascending: false })
-        .limit(1);
-
-      if (fallbackRows && fallbackRows.length > 0) {
-        setInsight(fallbackRows[0] as DailyInsight);
-      } else {
-        setInsight(null);
-      }
+      setInsight(null);
     }
 
     // Last 7 days for chart
-    const sevenAgo = new Date();
-    sevenAgo.setDate(sevenAgo.getDate() - 6);
-    const fromDate = sevenAgo.toLocaleDateString("en-CA", {
-      timeZone: "America/Denver",
-    });
+    const fromDate = getMtnCycleDate(-6);
 
     const { data: chartRows } = await supabase
       .from("daily_insights")
@@ -220,7 +197,7 @@ export default function InsightsPage() {
       }));
       setWeekScores(scores);
     }
-  }, [router, yesterday]);
+  }, [router, currentCycleDate]);
 
   useEffect(() => {
     async function init() {
@@ -245,12 +222,25 @@ export default function InsightsPage() {
       const res = await fetch("/api/insights/daily", { method: "POST" });
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.message || data.error || "Generate failed");
+        // Handle both object and string errors
+        const errMsg = typeof data.error === 'object' 
+          ? JSON.stringify(data.error) 
+          : (data.message || data.error || "Generate failed");
+        throw new Error(errMsg);
       }
       await loadData();
     } catch (err: unknown) {
-      console.error("Generate error:", err);
-      const message = err instanceof Error ? err.message : "Failed to generate insights. Please try again.";
+      console.error("Generate error full details:", err);
+      let message = "Failed to generate insights. Please try again.";
+      
+      if (err instanceof Error) {
+        message = err.message;
+      } else if (typeof err === 'object' && err !== null) {
+        message = JSON.stringify(err);
+      } else if (typeof err === 'string') {
+        message = err;
+      }
+      
       setError(message);
     } finally {
       setGenerating(false);
@@ -259,7 +249,7 @@ export default function InsightsPage() {
 
   // Format date display
   const formattedDate = (() => {
-    const [y, m, d] = yesterday.split("-").map(Number);
+    const [y, m, d] = currentCycleDate.split("-").map(Number);
     return new Date(y, m - 1, d).toLocaleDateString("en-US", {
       weekday: "long",
       month: "long",
@@ -299,7 +289,7 @@ export default function InsightsPage() {
   const chartData = weekScores.map((s) => {
     const [y, m, d] = s.date.split("-").map(Number);
     const day = dayLabels[new Date(y, m - 1, d).getDay()];
-    return { day, score: s.score, isYesterday: s.date === yesterday };
+    return { day, score: s.score, isToday: s.date === currentCycleDate };
   });
 
   return (
@@ -454,7 +444,7 @@ export default function InsightsPage() {
                 marginBottom: 24,
               }}
             >
-              Generated daily at 8am MT from your Oura data + meal logs
+              Generated daily at 8:01am MT from your Oura data + meal logs
             </p>
             <button
               onClick={(e) => {
@@ -894,7 +884,7 @@ export default function InsightsPage() {
                           marginBottom: 2,
                         }}
                       >
-                        {item.item}
+                        {item.label}
                       </div>
                       <div
                         style={{
@@ -994,7 +984,7 @@ export default function InsightsPage() {
                           marginBottom: 2,
                         }}
                       >
-                        {item.item}
+                        {item.label}
                       </div>
                       <div
                         style={{
@@ -1158,7 +1148,7 @@ export default function InsightsPage() {
                       {chartData.map((entry, index) => (
                         <Cell
                           key={`cell-${index}`}
-                          fill={entry.isYesterday ? GREEN : "#2a2a3a"}
+                          fill={entry.isToday ? GREEN : "#2a2a3a"}
                         />
                       ))}
                     </Bar>

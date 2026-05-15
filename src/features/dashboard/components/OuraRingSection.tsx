@@ -1,4 +1,4 @@
-import { OuraMetrics } from "@/lib/supabase";
+import { OuraMetrics } from "@/src/core/entities/OuraMetrics";
 import { minutesAgo } from "@/lib/dates";
 import { cardStyle, sectionHeadingStyle, monoSmall } from "@/lib/dashboard-helpers";
 import OuraCard from "./OuraCard";

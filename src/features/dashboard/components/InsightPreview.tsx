@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { DailyInsight } from "@/lib/supabase";
+import { DailyInsight } from "@/src/core/entities/Insight";
 import { flareRiskColor, cardStyle, sectionHeadingStyle, monoSmall } from "@/lib/dashboard-helpers";
 
 interface InsightPreviewProps {

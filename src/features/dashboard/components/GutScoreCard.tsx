@@ -1,9 +1,10 @@
-import { MealLog, OuraMetrics } from "@/lib/supabase";
+import { Meal } from "@/src/core/entities/Meal";
+import { OuraMetrics } from "@/src/core/entities/OuraMetrics";
 import { cardStyle, monoSmall } from "@/lib/dashboard-helpers";
 
 interface GutScoreCardProps {
   gutScore: number;
-  meals: MealLog[];
+  meals: Meal[];
   oura: OuraMetrics | null;
 }
 

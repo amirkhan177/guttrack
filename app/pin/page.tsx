@@ -25,11 +25,20 @@ export default function PinPage() {
 
   useEffect(() => {
     async function init() {
-      const supabase = createSupabaseBrowserClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { router.replace("/auth"); return; }
-      setMode(user.user_metadata?.pin_hash ? "entry" : "setup");
-      setLoading(false);
+      try {
+        const supabase = createSupabaseBrowserClient();
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        if (authError || !user) { 
+          router.replace("/auth"); 
+          return; 
+        }
+        setMode(user.user_metadata?.pin_hash ? "entry" : "setup");
+      } catch (err) {
+        console.error("Pin init error:", err);
+        setError("Failed to initialize. Please refresh.");
+      } finally {
+        setLoading(false);
+      }
     }
     init();
   }, [router]);

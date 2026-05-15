@@ -9,7 +9,7 @@ import {
   isSessionExpired,
   refreshActivity,
 } from "@/lib/crypto";
-import NavBar from "@/components/NavBar";
+import NavBar from "@/src/shared/components/NavBar";
 
 // ─── Design tokens ───────────────────────────────────────────────────────────
 

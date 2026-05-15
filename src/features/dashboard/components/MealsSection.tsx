@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { MealLog } from "@/lib/supabase";
+import { Meal } from "@/src/core/entities/Meal";
 import { relativeTime } from "@/lib/dates";
 import { 
   cardStyle, 
@@ -10,7 +10,7 @@ import {
 } from "@/lib/dashboard-helpers";
 
 interface MealsSectionProps {
-  meals: MealLog[];
+  meals: Meal[];
   handleInteraction: () => void;
 }
 

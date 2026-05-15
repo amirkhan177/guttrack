@@ -1,63 +1,24 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
-import { createSupabaseBrowserClient } from "@/lib/supabase";
-import {
-  getPinFromSession,
-  isSessionExpired,
-  refreshActivity,
-  clearSession,
-} from "@/lib/crypto";
-import NavBar from "@/components/NavBar";
+import { useState, useEffect } from "react";
+import NavBar from "@/src/shared/components/NavBar";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// Hooks
+import { useMealLog } from "@/src/features/meals/hooks/useMealLog";
+import { useWeightLog } from "@/src/features/weight/hooks/useWeightLog";
+import { useSessionGuard } from "@/src/features/auth/hooks/useSessionGuard";
+
+// ─── Constants ────────────────────────────────────────────────────────────────
 
 type MainTab = "MEAL" | "WEIGHT";
-
-type FoodAnalysis = {
-  protein: string;
-  carbs: string;
-  spice: string;
-  gut_notes: string;
-  fiber_level: "high" | "moderate" | "low";
-  key_nutrients: string[];
-  gut_cautions: string[];
-  ibs_trigger_risk: "low" | "moderate" | "high";
-  kidney_notes: string;
-};
-
 type MealType = "Breakfast" | "Lunch" | "Dinner" | "Snack";
-type Step = 1 | 2 | 3 | 4 | 5;
 type Feeling = "Great" | "Good" | "Okay" | "Bad" | "Awful";
-
 type AlcoholChoice = "None" | "Beer" | "Wine" | "Spirit";
 
-const PROTEIN_OPTIONS = [
-  "Chicken",
-  "Fish",
-  "Eggs",
-  "Red Meat",
-  "Lentils/Dal",
-  "Tofu",
-  "None",
-];
-
-const CARB_OPTIONS = [
-  "White Rice",
-  "Bread",
-  "Pasta",
-  "Cooked Vegetables",
-  "Leafy Greens",
-  "Legumes/Beans",
-  "Oats",
-  "None",
-];
-
+const PROTEIN_OPTIONS = ["Chicken", "Fish", "Eggs", "Red Meat", "Lentils/Dal", "Tofu", "None"];
+const CARB_OPTIONS = ["White Rice", "Bread", "Pasta", "Cooked Vegetables", "Leafy Greens", "Legumes/Beans", "Oats", "None"];
 const SPICE_OPTIONS = ["None", "Mild", "Medium", "Hot", "Very Hot"];
-
 const ALCOHOL_OPTIONS: AlcoholChoice[] = ["None", "Beer", "Wine", "Spirit"];
-
 const FEELINGS: { emoji: string; label: Feeling }[] = [
   { emoji: "😊", label: "Great" },
   { emoji: "🙂", label: "Good" },
@@ -65,14 +26,7 @@ const FEELINGS: { emoji: string; label: Feeling }[] = [
   { emoji: "😣", label: "Bad" },
   { emoji: "🤢", label: "Awful" },
 ];
-
-type SymptomTag = {
-  key: string;
-  label: string;
-  icon: string;
-};
-
-const SYMPTOM_TAGS: SymptomTag[] = [
+const SYMPTOM_TAGS = [
   { key: "burning", label: "Burning", icon: "🔥" },
   { key: "pain", label: "Pain", icon: "⚡" },
   { key: "sore_left", label: "Sore Left", icon: "◀" },
@@ -80,12 +34,7 @@ const SYMPTOM_TAGS: SymptomTag[] = [
   { key: "front", label: "Front", icon: "↑" },
   { key: "back", label: "Back", icon: "↓" },
 ];
-
-const ALCOHOL_OZ: Record<string, number> = {
-  Beer: 14,
-  Wine: 6,
-  Spirit: 2,
-};
+const ALCOHOL_OZ: Record<string, number> = { Beer: 14, Wine: 6, Spirit: 2 };
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
@@ -117,10 +66,10 @@ const selectedCard: React.CSSProperties = {
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function ProgressBar({ step }: { step: Step }) {
+function ProgressBar({ step }: { step: number }) {
   return (
     <div style={{ display: "flex", gap: 4, marginBottom: 20 }}>
-      {([1, 2, 3, 4, 5] as Step[]).map((s) => (
+      {[1, 2, 3, 4, 5].map((s) => (
         <div
           key={s}
           style={{
@@ -174,98 +123,22 @@ function MealTypePills({
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function LogPage() {
-  const router = useRouter();
+  const { handleInteraction, checkSession } = useSessionGuard();
 
-  // Session guard
   useEffect(() => {
-    const pin = getPinFromSession();
-    if (!pin || isSessionExpired()) {
-      clearSession();
-      router.replace("/pin");
-    }
-  }, [router]);
+    checkSession();
+  }, [checkSession]);
 
-  const touch = useCallback(() => refreshActivity(), []);
-
-  // ── Tab state
   const [mainTab, setMainTab] = useState<MainTab>("MEAL");
 
-  // ── Meal state
-  const [step, setStep] = useState<Step>(1);
-  const [mealType, setMealType] = useState<MealType>("Breakfast");
-  const [protein, setProtein] = useState<string | null>(null);
-  const [carbs, setCarbs] = useState<string | null>(null);
-  const [spice, setSpice] = useState<string | null>(null);
-  const [alcohol, setAlcohol] = useState<AlcoholChoice | null>(null);
-  const [alcoholQty, setAlcoholQty] = useState(1);
-  const [feeling, setFeeling] = useState<Feeling | null>(null);
-  const [symptoms, setSymptoms] = useState<Set<string>>(new Set());
-  const [saving, setSaving] = useState(false);
-  const [showSuccess, setShowSuccess] = useState(false);
+  const mealLog = useMealLog();
+  const weightLog = useWeightLog();
 
-  // ── Food analysis state
-  const [foodDescription, setFoodDescription] = useState("");
-  const [analyzing, setAnalyzing] = useState(false);
-  const [foodAnalysis, setFoodAnalysis] = useState<FoodAnalysis | null>(null);
-  const [analyzeError, setAnalyzeError] = useState<string | null>(null);
   const [textareaFocused, setTextareaFocused] = useState(false);
 
-  // ── Weight state
-  const [weightValue, setWeightValue] = useState("");
-  const [weightUnit, setWeightUnit] = useState<"lbs" | "kg">("lbs");
-  const [recentWeights, setRecentWeights] = useState<
-    { date: string; weight_kg: number }[]
-  >([]);
-  const [weightSaving, setWeightSaving] = useState(false);
-  const [weightSuccess, setWeightSuccess] = useState(false);
-
-  // Load recent weights on mount
-  useEffect(() => {
-    async function loadWeights() {
-      const supabase = createSupabaseBrowserClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
-      const { data } = await supabase
-        .from("weight_entries")
-        .select("date, weight_kg")
-        .eq("user_id", user.id)
-        .order("date", { ascending: false })
-        .limit(7);
-      if (data) setRecentWeights(data);
-    }
-    loadWeights();
-  }, [weightSuccess]);
-
-  // ── Meal helpers
-  function resetMeal() {
-    setStep(1);
-    setProtein(null);
-    setCarbs(null);
-    setSpice(null);
-    setAlcohol(null);
-    setAlcoholQty(1);
-    setFeeling(null);
-    setSymptoms(new Set());
-    setFoodDescription("");
-    setFoodAnalysis(null);
-    setAnalyzing(false);
-    setAnalyzeError(null);
-  }
-
-  function goBack() {
-    touch();
-    if (step > 1) setStep((s) => (s - 1) as Step);
-  }
-
-  function advanceStep() {
-    setStep((s) => (s + 1) as Step);
-  }
-
   function toggleSymptom(key: string) {
-    touch();
-    setSymptoms((prev) => {
+    handleInteraction();
+    mealLog.setSymptoms((prev) => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key);
       else next.add(key);
@@ -273,124 +146,21 @@ export default function LogPage() {
     });
   }
 
-  function feelingEmoji(f: Feeling | null): string {
-    if (!f) return "";
-    const found = FEELINGS.find((x) => x.label === f);
-    return found ? found.emoji : "";
-  }
-
-  function buildAlcoholString(): string {
-    if (!alcohol || alcohol === "None") return "None";
-    const oz = ALCOHOL_OZ[alcohol] * alcoholQty;
-    return `${alcohol}:${alcoholQty}:${oz}oz`;
-  }
-
-  async function analyzeFoodDescription() {
-    if (!foodDescription.trim() || analyzing) return;
-    setAnalyzing(true);
-    setAnalyzeError(null);
-    try {
-      const res = await fetch("/api/food/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ description: foodDescription }),
-      });
-      if (!res.ok) throw new Error("Analysis failed");
-      const data: FoodAnalysis = await res.json();
-      setFoodAnalysis(data);
-      // Auto-pre-fill selections from analysis
-      if (data.protein) setProtein(data.protein);
-      if (data.carbs) setCarbs(data.carbs);
-      if (data.spice) setSpice(data.spice);
-    } catch {
-      setAnalyzeError("Could not analyze. Try again.");
-    } finally {
-      setAnalyzing(false);
-    }
-  }
-
-  async function saveMeal() {
-    touch();
-    if (!feeling) return;
-    setSaving(true);
-    setAnalyzeError(null); // Reuse analyze error for simplicity or add a new one
-    try {
-      const supabase = createSupabaseBrowserClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
-        router.replace("/pin");
-        return;
-      }
-      const { error } = await supabase.from("meal_logs").insert({
-        timestamp: new Date().toISOString(),
-        meal_type: mealType,
-        protein,
-        carbs,
-        spice,
-        alcohol: buildAlcoholString(),
-        feeling,
-        symptom_tags: Array.from(symptoms),
-        user_id: user.id,
-        food_description: foodDescription || null,
-      });
-
-      if (error) throw error;
-
-      setShowSuccess(true);
-      setTimeout(() => {
-        setShowSuccess(false);
-        resetMeal();
-      }, 1600);
-    } catch (err: unknown) {
-      console.error("Save meal error:", err);
-      const message = err instanceof Error ? err.message : "Could not save meal. Please try again.";
-      setAnalyzeError(message);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function saveWeight() {
-    touch();
-    if (!weightValue) return;
-    setWeightSaving(true);
-    try {
-      const supabase = createSupabaseBrowserClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
-        router.replace("/pin");
-        return;
-      }
-      const raw = parseFloat(weightValue);
-      if (isNaN(raw)) return;
-      const kg = weightUnit === "lbs" ? raw / 2.20462 : raw;
-      const today = new Date().toISOString().split("T")[0];
-      await supabase.from("weight_entries").upsert(
-        { user_id: user.id, date: today, weight_kg: parseFloat(kg.toFixed(2)) },
-        { onConflict: "user_id,date" }
-      );
-      setWeightValue("");
-      setWeightSuccess((v) => !v);
-    } finally {
-      setWeightSaving(false);
-    }
-  }
-
-  function formatWeightDisplay(kg: number): string {
-    if (weightUnit === "lbs") return `${(kg * 2.20462).toFixed(1)} lbs`;
-    return `${kg.toFixed(1)} kg`;
-  }
-
   function formatDate(dateStr: string): string {
     const d = new Date(dateStr + "T00:00:00");
     return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   }
 
-  // ── Render
+  function formatTime(isoStr: string): string {
+    const d = new Date(isoStr);
+    return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  }
+
+  function formatWeightDisplay(kg: number): string {
+    if (weightLog.weightUnit === "lbs") return `${(kg * 2.20462).toFixed(1)} lbs`;
+    return `${kg.toFixed(1)} kg`;
+  }
+
   return (
     <div
       style={{
@@ -401,7 +171,7 @@ export default function LogPage() {
         paddingBottom: 90,
         position: "relative",
       }}
-      onClick={touch}
+      onClick={handleInteraction}
     >
       {/* Header */}
       <div
@@ -421,56 +191,71 @@ export default function LogPage() {
             margin: 0,
           }}
         >
-          Log
+          {mealLog.editingMealId ? "Edit Meal" : "Log"}
         </h1>
+        {mealLog.editingMealId && (
+          <button
+            onClick={() => mealLog.reset()}
+            style={{
+              background: "none",
+              border: "none",
+              color: RED,
+              fontFamily: MONO,
+              fontSize: 10,
+              cursor: "pointer",
+            }}
+          >
+            CANCEL EDIT
+          </button>
+        )}
       </div>
 
       {/* Main tab segmented control */}
-      <div style={{ padding: "0 20px", marginBottom: 20 }}>
-        <div
-          style={{
-            display: "flex",
-            background: CARD,
-            borderRadius: 12,
-            border: `1px solid ${BORDER}`,
-            padding: 3,
-          }}
-        >
-          {(["MEAL", "WEIGHT"] as MainTab[]).map((t) => (
-            <button
-              key={t}
-              onClick={() => {
-                touch();
-                setMainTab(t);
-              }}
-              style={{
-                flex: 1,
-                padding: "8px 0",
-                borderRadius: 10,
-                border: "none",
-                background: mainTab === t ? GREEN : "transparent",
-                color: mainTab === t ? "#0A0A0F" : "#666",
-                fontFamily: MONO,
-                fontSize: 11,
-                fontWeight: 700,
-                letterSpacing: "0.1em",
-                cursor: "pointer",
-                transition: "all 0.2s ease",
-              }}
-            >
-              {t}
-            </button>
-          ))}
+      {!mealLog.editingMealId && (
+        <div style={{ padding: "0 20px", marginBottom: 20 }}>
+          <div
+            style={{
+              display: "flex",
+              background: CARD,
+              borderRadius: 12,
+              border: `1px solid ${BORDER}`,
+              padding: 3,
+            }}
+          >
+            {(["MEAL", "WEIGHT"] as MainTab[]).map((t) => (
+              <button
+                key={t}
+                onClick={() => {
+                  handleInteraction();
+                  setMainTab(t);
+                }}
+                style={{
+                  flex: 1,
+                  padding: "8px 0",
+                  borderRadius: 10,
+                  border: "none",
+                  background: mainTab === t ? GREEN : "transparent",
+                  color: mainTab === t ? "#0A0A0F" : "#666",
+                  fontFamily: MONO,
+                  fontSize: 11,
+                  fontWeight: 700,
+                  letterSpacing: "0.1em",
+                  cursor: "pointer",
+                  transition: "all 0.2s ease",
+                }}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* ── MEAL TAB */}
       {mainTab === "MEAL" && (
         <div style={{ padding: "0 20px" }}>
-          {/* Progress bar */}
-          <ProgressBar step={step} />
+          <ProgressBar step={mealLog.step} />
 
-          {/* Step header row */}
           <div
             style={{
               display: "flex",
@@ -479,9 +264,9 @@ export default function LogPage() {
               gap: 12,
             }}
           >
-            {step > 1 && (
+            {mealLog.step > 1 && (
               <button
-                onClick={goBack}
+                onClick={() => mealLog.setStep((s) => s - 1)}
                 style={{
                   background: "none",
                   border: "none",
@@ -501,30 +286,27 @@ export default function LogPage() {
                 fontSize: 9,
                 color: "#555",
                 letterSpacing: "0.12em",
-                marginLeft: step === 1 ? 0 : undefined,
+                marginLeft: mealLog.step === 1 ? 0 : undefined,
               }}
             >
-              {step} OF 5
+              {mealLog.step} OF 5
             </span>
           </div>
 
-          {/* Meal type pills — persists across all steps */}
           <MealTypePills
-            selected={mealType}
+            selected={mealLog.mealType}
             onSelect={(m) => {
-              touch();
-              setMealType(m);
+              handleInteraction();
+              mealLog.setMealType(m);
             }}
           />
 
-          {/* ── FOOD ANALYSIS CARD */}
           <div style={{ marginBottom: 16 }}>
-            {/* Textarea */}
             <textarea
-              value={foodDescription}
+              value={mealLog.foodDescription}
               onChange={(e) => {
-                touch();
-                setFoodDescription(e.target.value);
+                handleInteraction();
+                mealLog.setFoodDescription(e.target.value);
               }}
               onFocus={() => setTextareaFocused(true)}
               onBlur={() => setTextareaFocused(false)}
@@ -547,26 +329,25 @@ export default function LogPage() {
               }}
             />
 
-            {/* Analyze button */}
             <button
               onClick={() => {
-                touch();
-                analyzeFoodDescription();
+                handleInteraction();
+                mealLog.analyze();
               }}
-              disabled={!foodDescription.trim() || analyzing}
+              disabled={!mealLog.foodDescription.trim() || mealLog.analyzing}
               style={{
                 width: "100%",
                 height: 44,
                 marginTop: 8,
                 borderRadius: 12,
-                border: `1px solid ${!foodDescription.trim() || analyzing ? BORDER : GREEN}`,
+                border: `1px solid ${!mealLog.foodDescription.trim() || mealLog.analyzing ? BORDER : GREEN}`,
                 background: "transparent",
-                color: !foodDescription.trim() || analyzing ? "#555" : GREEN,
+                color: !mealLog.foodDescription.trim() || mealLog.analyzing ? "#555" : GREEN,
                 fontFamily: MONO,
                 fontSize: 11,
                 fontWeight: 700,
                 letterSpacing: "0.1em",
-                cursor: !foodDescription.trim() || analyzing ? "not-allowed" : "pointer",
+                cursor: !mealLog.foodDescription.trim() || mealLog.analyzing ? "not-allowed" : "pointer",
                 transition: "all 0.15s ease",
                 display: "flex",
                 alignItems: "center",
@@ -574,41 +355,14 @@ export default function LogPage() {
                 gap: 6,
               }}
             >
-              {analyzing ? (
-                <>
-                  <span
-                    style={{
-                      display: "inline-block",
-                      animation: "spin 1s linear infinite",
-                      fontSize: 14,
-                    }}
-                  >
-                    ◌
-                  </span>
-                  ANALYZING...
-                </>
-              ) : (
-                "ANALYZE WITH AI ✦"
-              )}
+              {mealLog.analyzing ? "ANALYZING..." : "ANALYZE WITH AI ✦"}
             </button>
 
-            {/* Error message */}
-            {analyzeError && (
-              <p
-                style={{
-                  fontFamily: MONO,
-                  fontSize: 10,
-                  color: RED,
-                  marginTop: 6,
-                  letterSpacing: "0.06em",
-                }}
-              >
-                {analyzeError}
-              </p>
+            {mealLog.error && (
+              <p style={{ fontFamily: MONO, fontSize: 10, color: RED, marginTop: 6 }}>{mealLog.error}</p>
             )}
 
-            {/* Analysis result card */}
-            {foodAnalysis && (
+            {mealLog.foodAnalysis && (
               <div
                 style={{
                   marginTop: 10,
@@ -618,397 +372,61 @@ export default function LogPage() {
                   padding: 14,
                 }}
               >
-                {/* Label */}
-                <p
-                  style={{
-                    fontFamily: MONO,
-                    fontSize: 9,
-                    color: GREEN,
-                    letterSpacing: "0.18em",
-                    marginBottom: 8,
-                    margin: 0,
-                  }}
-                >
-                  AI ANALYSIS
-                </p>
-
-                {/* gut_notes */}
-                <p
-                  style={{
-                    color: "#c8c8d8",
-                    fontSize: 13,
-                    lineHeight: 1.5,
-                    marginTop: 8,
-                    marginBottom: 10,
-                  }}
-                >
-                  {foodAnalysis.gut_notes}
-                </p>
-
-                {/* Fiber + IBS pills row */}
-                <div
-                  style={{
-                    display: "flex",
-                    gap: 8,
-                    flexWrap: "wrap",
-                    marginBottom: 10,
-                  }}
-                >
-                  {/* Fiber level pill */}
-                  <span
-                    style={{
-                      fontFamily: MONO,
-                      fontSize: 9,
-                      letterSpacing: "0.08em",
-                      padding: "4px 10px",
-                      borderRadius: 20,
-                      background: "rgba(0,0,0,0.3)",
-                      border: `1px solid ${
-                        foodAnalysis.fiber_level === "high"
-                          ? GREEN
-                          : foodAnalysis.fiber_level === "moderate"
-                          ? YELLOW
-                          : RED
-                      }`,
-                      color:
-                        foodAnalysis.fiber_level === "high"
-                          ? GREEN
-                          : foodAnalysis.fiber_level === "moderate"
-                          ? YELLOW
-                          : RED,
-                    }}
-                  >
-                    FIBER · {foodAnalysis.fiber_level.toUpperCase()}
-                  </span>
-
-                  {/* IBS risk pill */}
-                  <span
-                    style={{
-                      fontFamily: MONO,
-                      fontSize: 9,
-                      letterSpacing: "0.08em",
-                      padding: "4px 10px",
-                      borderRadius: 20,
-                      background: "rgba(0,0,0,0.3)",
-                      border: `1px solid ${
-                        foodAnalysis.ibs_trigger_risk === "low"
-                          ? GREEN
-                          : foodAnalysis.ibs_trigger_risk === "moderate"
-                          ? ORANGE
-                          : RED
-                      }`,
-                      color:
-                        foodAnalysis.ibs_trigger_risk === "low"
-                          ? GREEN
-                          : foodAnalysis.ibs_trigger_risk === "moderate"
-                          ? ORANGE
-                          : RED,
-                    }}
-                  >
-                    IBS RISK · {foodAnalysis.ibs_trigger_risk.toUpperCase()}
-                  </span>
+                <p style={{ fontFamily: MONO, fontSize: 9, color: GREEN, letterSpacing: "0.18em", marginBottom: 8, margin: 0 }}>AI ANALYSIS</p>
+                <p style={{ color: "#c8c8d8", fontSize: 13, lineHeight: 1.5, marginTop: 8, marginBottom: 10 }}>{mealLog.foodAnalysis.gut_notes}</p>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+                  <span style={{ fontFamily: MONO, fontSize: 9, padding: "4px 10px", borderRadius: 20, background: "rgba(0,0,0,0.3)", border: `1px solid ${mealLog.foodAnalysis.fiber_level === "high" ? GREEN : mealLog.foodAnalysis.fiber_level === "moderate" ? YELLOW : RED}`, color: mealLog.foodAnalysis.fiber_level === "high" ? GREEN : mealLog.foodAnalysis.fiber_level === "moderate" ? YELLOW : RED }}>FIBER · {mealLog.foodAnalysis.fiber_level.toUpperCase()}</span>
+                  <span style={{ fontFamily: MONO, fontSize: 9, padding: "4px 10px", borderRadius: 20, background: "rgba(0,0,0,0.3)", border: `1px solid ${mealLog.foodAnalysis.ibs_trigger_risk === "low" ? GREEN : mealLog.foodAnalysis.ibs_trigger_risk === "moderate" ? ORANGE : RED}`, color: mealLog.foodAnalysis.ibs_trigger_risk === "low" ? GREEN : mealLog.foodAnalysis.ibs_trigger_risk === "moderate" ? ORANGE : RED }}>IBS RISK · {mealLog.foodAnalysis.ibs_trigger_risk.toUpperCase()}</span>
                 </div>
-
-                {/* Cautions */}
-                {foodAnalysis.gut_cautions.length > 0 && (
-                  <div style={{ marginBottom: 8 }}>
-                    {foodAnalysis.gut_cautions.map((c, i) => (
-                      <p
-                        key={i}
-                        style={{
-                          fontFamily: MONO,
-                          fontSize: 11,
-                          color: ORANGE,
-                          margin: "4px 0",
-                          letterSpacing: "0.04em",
-                        }}
-                      >
-                        ⚠️ {c}
-                      </p>
-                    ))}
-                  </div>
-                )}
-
-                {/* Kidney notes */}
-                {foodAnalysis.kidney_notes && (
-                  <p
-                    style={{
-                      fontFamily: MONO,
-                      fontSize: 10,
-                      color: "#666",
-                      margin: 0,
-                      marginBottom: 8,
-                    }}
-                  >
-                    {foodAnalysis.kidney_notes}
-                  </p>
-                )}
-
-                {/* Pre-fill hint */}
-                {(foodAnalysis.protein || foodAnalysis.carbs || foodAnalysis.spice) && (
-                  <p
-                    style={{
-                      fontFamily: MONO,
-                      fontSize: 9,
-                      color: GREEN,
-                      letterSpacing: "0.14em",
-                      margin: 0,
-                    }}
-                  >
-                    PRE-FILLED SELECTIONS BELOW ↓
-                  </p>
-                )}
               </div>
             )}
           </div>
 
-          {/* ── STEP 1: PROTEIN */}
-          {step === 1 && (
+          {/* Steps 1-5 logic moved from original but using mealLog state */}
+          {mealLog.step === 1 && (
             <div>
-              <p
-                style={{
-                  fontFamily: MONO,
-                  fontSize: 10,
-                  color: "#555",
-                  letterSpacing: "0.12em",
-                  marginBottom: 12,
-                }}
-              >
-                PROTEIN
-              </p>
+              <p style={{ fontFamily: MONO, fontSize: 10, color: "#555", letterSpacing: "0.12em", marginBottom: 12 }}>PROTEIN</p>
               {PROTEIN_OPTIONS.map((opt) => (
-                <div
-                  key={opt}
-                  onClick={() => {
-                    touch();
-                    setProtein(opt);
-                    advanceStep();
-                  }}
-                  style={{
-                    ...(protein === opt ? selectedCard : cardBase),
-                    minHeight: 52,
-                    display: "flex",
-                    alignItems: "center",
-                  }}
-                >
-                  <span style={{ color: "#d0d0e0", fontSize: 14 }}>{opt}</span>
-                </div>
+                <div key={opt} onClick={() => { handleInteraction(); mealLog.setProtein(opt); mealLog.setStep(2); }} style={mealLog.protein === opt ? selectedCard : cardBase}>{opt}</div>
               ))}
             </div>
           )}
 
-          {/* ── STEP 2: CARBS */}
-          {step === 2 && (
+          {mealLog.step === 2 && (
             <div>
-              <p
-                style={{
-                  fontFamily: MONO,
-                  fontSize: 10,
-                  color: "#555",
-                  letterSpacing: "0.12em",
-                  marginBottom: 12,
-                }}
-              >
-                CARBS
-              </p>
+              <p style={{ fontFamily: MONO, fontSize: 10, color: "#555", letterSpacing: "0.12em", marginBottom: 12 }}>CARBS</p>
               {CARB_OPTIONS.map((opt) => (
-                <div
-                  key={opt}
-                  onClick={() => {
-                    touch();
-                    setCarbs(opt);
-                    advanceStep();
-                  }}
-                  style={{
-                    ...(carbs === opt ? selectedCard : cardBase),
-                    minHeight: 52,
-                    display: "flex",
-                    alignItems: "center",
-                  }}
-                >
-                  <span style={{ color: "#d0d0e0", fontSize: 14 }}>{opt}</span>
-                </div>
+                <div key={opt} onClick={() => { handleInteraction(); mealLog.setCarbs(opt); mealLog.setStep(3); }} style={mealLog.carbs === opt ? selectedCard : cardBase}>{opt}</div>
               ))}
             </div>
           )}
 
-          {/* ── STEP 3: SPICE */}
-          {step === 3 && (
+          {mealLog.step === 3 && (
             <div>
-              <p
-                style={{
-                  fontFamily: MONO,
-                  fontSize: 10,
-                  color: "#555",
-                  letterSpacing: "0.12em",
-                  marginBottom: 12,
-                }}
-              >
-                SPICE LEVEL
-              </p>
+              <p style={{ fontFamily: MONO, fontSize: 10, color: "#555", letterSpacing: "0.12em", marginBottom: 12 }}>SPICE LEVEL</p>
               {SPICE_OPTIONS.map((opt) => (
-                <div
-                  key={opt}
-                  onClick={() => {
-                    touch();
-                    setSpice(opt);
-                    advanceStep();
-                  }}
-                  style={{
-                    ...(spice === opt ? selectedCard : cardBase),
-                    minHeight: 52,
-                    display: "flex",
-                    alignItems: "center",
-                  }}
-                >
-                  <span style={{ color: "#d0d0e0", fontSize: 14 }}>{opt}</span>
-                </div>
+                <div key={opt} onClick={() => { handleInteraction(); mealLog.setSpice(opt); mealLog.setStep(4); }} style={mealLog.spice === opt ? selectedCard : cardBase}>{opt}</div>
               ))}
             </div>
           )}
 
-          {/* ── STEP 4: ALCOHOL */}
-          {step === 4 && (
+          {mealLog.step === 4 && (
             <div>
-              <p
-                style={{
-                  fontFamily: MONO,
-                  fontSize: 10,
-                  color: "#555",
-                  letterSpacing: "0.12em",
-                  marginBottom: 12,
-                }}
-              >
-                ALCOHOL
-              </p>
+              <p style={{ fontFamily: MONO, fontSize: 10, color: "#555", letterSpacing: "0.12em", marginBottom: 12 }}>ALCOHOL</p>
               {ALCOHOL_OPTIONS.map((opt) => (
                 <div key={opt}>
-                  <div
-                    onClick={() => {
-                      touch();
-                      if (opt === "None") {
-                        setAlcohol("None");
-                        advanceStep();
-                      } else {
-                        setAlcohol(opt);
-                        setAlcoholQty(1);
-                      }
-                    }}
-                    style={{
-                      ...(alcohol === opt ? selectedCard : cardBase),
-                      minHeight: 52,
-                      display: "flex",
-                      alignItems: "center",
-                    }}
-                  >
-                    <span style={{ color: "#d0d0e0", fontSize: 14 }}>{opt}</span>
-                  </div>
-
-                  {/* Quantity controls for selected non-None alcohol */}
-                  {alcohol === opt && opt !== "None" && (
-                    <div
-                      style={{
-                        background: CARD,
-                        border: `1px solid ${GREEN}`,
-                        borderRadius: 18,
-                        padding: "16px 20px",
-                        marginBottom: 10,
-                        marginTop: -6,
-                      }}
-                    >
-                      {/* Counter */}
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          marginBottom: 12,
-                        }}
-                      >
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            touch();
-                            setAlcoholQty((q) => Math.max(1, q - 1));
-                          }}
-                          style={{
-                            width: 40,
-                            height: 40,
-                            borderRadius: "50%",
-                            border: `1px solid ${BORDER}`,
-                            background: "#1a1a2a",
-                            color: "#e8e8f0",
-                            fontSize: 20,
-                            cursor: "pointer",
-                          }}
-                        >
-                          −
-                        </button>
+                  <div onClick={() => { handleInteraction(); if (opt === "None") { mealLog.setAlcohol("None"); mealLog.setStep(5); } else { mealLog.setAlcohol(opt); mealLog.setAlcoholQty(1); } }} style={mealLog.alcohol === opt ? selectedCard : cardBase}>{opt}</div>
+                  {mealLog.alcohol === opt && opt !== "None" && (
+                    <div style={{ background: CARD, border: `1px solid ${GREEN}`, borderRadius: 18, padding: "16px 20px", marginBottom: 10, marginTop: -6 }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                        <button onClick={(e) => { e.stopPropagation(); handleInteraction(); mealLog.setAlcoholQty((q) => Math.max(1, q - 1)); }} style={{ width: 40, height: 40, borderRadius: "50%", border: `1px solid ${BORDER}`, background: "#1a1a2a", color: "#e8e8f0", fontSize: 20 }}>−</button>
                         <div style={{ textAlign: "center" }}>
-                          <div
-                            style={{
-                              fontFamily: MONO,
-                              fontSize: 36,
-                              color: GREEN,
-                              lineHeight: 1,
-                            }}
-                          >
-                            {alcoholQty}
-                          </div>
-                          <div
-                            style={{
-                              fontFamily: MONO,
-                              fontSize: 9,
-                              color: "#555",
-                              marginTop: 4,
-                            }}
-                          >
-                            {ALCOHOL_OZ[opt] * alcoholQty} OZ TOTAL
-                          </div>
+                          <div style={{ fontFamily: MONO, fontSize: 36, color: GREEN, lineHeight: 1 }}>{mealLog.alcoholQty}</div>
+                          <div style={{ fontFamily: MONO, fontSize: 9, color: "#555", marginTop: 4 }}>{ALCOHOL_OZ[opt] * mealLog.alcoholQty} OZ TOTAL</div>
                         </div>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            touch();
-                            setAlcoholQty((q) => q + 1);
-                          }}
-                          style={{
-                            width: 40,
-                            height: 40,
-                            borderRadius: "50%",
-                            border: `1px solid ${BORDER}`,
-                            background: "#1a1a2a",
-                            color: "#e8e8f0",
-                            fontSize: 20,
-                            cursor: "pointer",
-                          }}
-                        >
-                          +
-                        </button>
+                        <button onClick={(e) => { e.stopPropagation(); handleInteraction(); mealLog.setAlcoholQty((q) => q + 1); }} style={{ width: 40, height: 40, borderRadius: "50%", border: `1px solid ${BORDER}`, background: "#1a1a2a", color: "#e8e8f0", fontSize: 20 }}>+</button>
                       </div>
-                      {/* Confirm */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          touch();
-                          advanceStep();
-                        }}
-                        style={{
-                          width: "100%",
-                          padding: "12px 0",
-                          borderRadius: 12,
-                          border: "none",
-                          background: GREEN,
-                          color: "#0A0A0F",
-                          fontFamily: MONO,
-                          fontSize: 11,
-                          fontWeight: 700,
-                          letterSpacing: "0.1em",
-                          cursor: "pointer",
-                        }}
-                      >
-                        CONFIRM · {ALCOHOL_OZ[opt] * alcoholQty} OZ TOTAL
-                      </button>
+                      <button onClick={(e) => { e.stopPropagation(); handleInteraction(); mealLog.setStep(5); }} style={{ width: "100%", padding: "12px 0", borderRadius: 12, border: "none", background: GREEN, color: "#0A0A0F", fontFamily: MONO, fontSize: 11, fontWeight: 700 }}>CONFIRM · {ALCOHOL_OZ[opt] * mealLog.alcoholQty} OZ TOTAL</button>
                     </div>
                   )}
                 </div>
@@ -1016,138 +434,60 @@ export default function LogPage() {
             </div>
           )}
 
-          {/* ── STEP 5: GUT FEELING */}
-          {step === 5 && (
+          {mealLog.step === 5 && (
             <div>
-              <p
-                style={{
-                  fontFamily: SERIF,
-                  fontSize: 18,
-                  color: "#e8e8f0",
-                  marginBottom: 20,
-                }}
-              >
-                How are you feeling?
-              </p>
-
-              {/* Feeling row */}
-              <div
-                style={{
-                  display: "flex",
-                  gap: 8,
-                  marginBottom: 24,
-                  justifyContent: "space-between",
-                }}
-              >
+              <p style={{ fontFamily: SERIF, fontSize: 18, color: "#e8e8f0", marginBottom: 20 }}>How are you feeling?</p>
+              <div style={{ display: "flex", gap: 8, marginBottom: 24, justifyContent: "space-between" }}>
                 {FEELINGS.map(({ emoji, label }) => (
-                  <button
-                    key={label}
-                    onClick={() => {
-                      touch();
-                      setFeeling(label);
-                    }}
-                    style={{
-                      flex: 1,
-                      padding: "10px 4px",
-                      borderRadius: 14,
-                      border: `2px solid ${feeling === label ? GREEN : BORDER}`,
-                      background: feeling === label ? "rgba(126,184,164,0.08)" : CARD,
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "center",
-                      gap: 6,
-                      cursor: "pointer",
-                      transition: "all 0.15s ease",
-                    }}
-                  >
+                  <button key={label} onClick={() => { handleInteraction(); mealLog.setFeeling(label); }} style={{ flex: 1, padding: "10px 4px", borderRadius: 14, border: `2px solid ${mealLog.feeling === label ? GREEN : BORDER}`, background: mealLog.feeling === label ? "rgba(126,184,164,0.08)" : CARD, display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
                     <span style={{ fontSize: 28 }}>{emoji}</span>
-                    <span
-                      style={{
-                        fontFamily: MONO,
-                        fontSize: 8,
-                        color: feeling === label ? GREEN : "#555",
-                        letterSpacing: "0.06em",
-                      }}
-                    >
-                      {label.toUpperCase()}
-                    </span>
+                    <span style={{ fontFamily: MONO, fontSize: 8, color: mealLog.feeling === label ? GREEN : "#555" }}>{label.toUpperCase()}</span>
                   </button>
                 ))}
               </div>
-
-              {/* Symptom tags */}
-              <p
-                style={{
-                  fontFamily: MONO,
-                  fontSize: 9,
-                  color: "#555",
-                  letterSpacing: "0.12em",
-                  marginBottom: 10,
-                }}
-              >
-                SYMPTOM TAGS
-              </p>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr 1fr",
-                  gap: 8,
-                  marginBottom: 24,
-                }}
-              >
+              <p style={{ fontFamily: MONO, fontSize: 9, color: "#555", letterSpacing: "0.12em", marginBottom: 10 }}>SYMPTOM TAGS</p>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 24 }}>
                 {SYMPTOM_TAGS.map(({ key, label, icon }) => {
-                  const active = symptoms.has(key);
+                  const active = mealLog.symptoms.has(key);
                   return (
-                    <button
-                      key={key}
-                      onClick={() => toggleSymptom(key)}
-                      style={{
-                        padding: "10px 6px",
-                        borderRadius: 12,
-                        border: `1px solid ${active ? ORANGE : BORDER}`,
-                        background: active ? "rgba(255,140,66,0.15)" : CARD,
-                        color: active ? ORANGE : "#666",
-                        fontFamily: MONO,
-                        fontSize: 9,
-                        letterSpacing: "0.06em",
-                        cursor: "pointer",
-                        transition: "all 0.15s ease",
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "center",
-                        gap: 4,
-                      }}
-                    >
+                    <button key={key} onClick={() => toggleSymptom(key)} style={{ padding: "10px 6px", borderRadius: 12, border: `1px solid ${active ? ORANGE : BORDER}`, background: active ? "rgba(255,140,66,0.15)" : CARD, color: active ? ORANGE : "#666", display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
                       <span style={{ fontSize: 14 }}>{icon}</span>
-                      <span>{label.toUpperCase()}</span>
+                      <span style={{ fontFamily: MONO, fontSize: 9 }}>{label.toUpperCase()}</span>
                     </button>
                   );
                 })}
               </div>
-
-              {/* Save button */}
-              <button
-                onClick={saveMeal}
-                disabled={!feeling || saving}
-                style={{
-                  width: "100%",
-                  padding: "15px 0",
-                  borderRadius: 14,
-                  border: "none",
-                  background: feeling ? GREEN : "#1e1e2e",
-                  color: feeling ? "#0A0A0F" : "#444",
-                  fontFamily: MONO,
-                  fontSize: 12,
-                  fontWeight: 700,
-                  letterSpacing: "0.1em",
-                  cursor: feeling ? "pointer" : "not-allowed",
-                  transition: "all 0.2s ease",
-                }}
-              >
-                {feeling
-                  ? `SAVE · ${feelingEmoji(feeling)}${symptoms.size > 0 ? ` · ${symptoms.size} TAG${symptoms.size > 1 ? "S" : ""}` : ""}`
-                  : "SAVE"}
+              <button onClick={() => mealLog.save()} disabled={!mealLog.feeling || mealLog.saving} style={{ width: "100%", padding: "15px 0", borderRadius: 14, border: "none", background: mealLog.feeling ? GREEN : "#1e1e2e", color: mealLog.feeling ? "#0A0A0F" : "#444", fontFamily: MONO, fontSize: 12, fontWeight: 700 }}>
+                {mealLog.saving ? "SAVING..." : mealLog.editingMealId ? "UPDATE MEAL" : "SAVE MEAL"}
               </button>
+            </div>
+          )}
+
+          {/* RECENT MEALS SECTION */}
+          {!mealLog.editingMealId && mealLog.recentMeals.length > 0 && (
+            <div style={{ marginTop: 40 }}>
+              <p style={{ fontFamily: MONO, fontSize: 9, color: "#555", letterSpacing: "0.14em", marginBottom: 14 }}>RECENT MEALS</p>
+              {mealLog.recentMeals.map((m) => (
+                <div key={m.id} style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 18, padding: "16px", marginBottom: 10 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+                    <div>
+                      <span style={{ fontFamily: MONO, fontSize: 10, color: GREEN, fontWeight: 700 }}>{m.meal_type.toUpperCase()}</span>
+                      <span style={{ fontFamily: MONO, fontSize: 10, color: "#444", marginLeft: 8 }}>{formatTime(m.timestamp)}</span>
+                    </div>
+                    <div style={{ display: "flex", gap: 12 }}>
+                      <button onClick={() => mealLog.editMeal(m)} style={{ background: "none", border: "none", color: "#666", fontFamily: MONO, fontSize: 10, cursor: "pointer" }}>EDIT</button>
+                      <button onClick={() => m.id && mealLog.deleteMeal(m.id)} style={{ background: "none", border: "none", color: RED, fontFamily: MONO, fontSize: 10, cursor: "pointer", opacity: 0.7 }}>DELETE</button>
+                    </div>
+                  </div>
+                  <p style={{ color: "#e8e8f0", fontSize: 14, margin: "0 0 6px" }}>{m.food_description || `${m.protein} with ${m.carbs}`}</p>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <span style={{ fontFamily: MONO, fontSize: 9, color: "#555" }}>{m.feeling?.toUpperCase()}</span>
+                    {m.symptom_tags.map(tag => (
+                      <span key={tag} style={{ fontFamily: MONO, fontSize: 9, color: ORANGE }}>· {tag.toUpperCase()}</span>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -1156,217 +496,41 @@ export default function LogPage() {
       {/* ── WEIGHT TAB */}
       {mainTab === "WEIGHT" && (
         <div style={{ padding: "0 20px" }}>
-          <div
-            style={{
-              background: CARD,
-              border: `1px solid ${BORDER}`,
-              borderRadius: 18,
-              padding: 20,
-              marginBottom: 16,
-            }}
-          >
-            <p
-              style={{
-                fontFamily: MONO,
-                fontSize: 9,
-                color: "#555",
-                letterSpacing: "0.14em",
-                marginBottom: 16,
-              }}
-            >
-              TODAY&apos;S WEIGHT
-            </p>
-
-            {/* Value input */}
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 12,
-                marginBottom: 16,
-              }}
-            >
-              <input
-                type="number"
-                inputMode="decimal"
-                placeholder="0.0"
-                value={weightValue}
-                onChange={(e) => {
-                  touch();
-                  setWeightValue(e.target.value);
-                }}
-                style={{
-                  flex: 1,
-                  background: "transparent",
-                  border: "none",
-                  borderBottom: `2px solid ${BORDER}`,
-                  outline: "none",
-                  color: YELLOW,
-                  fontFamily: MONO,
-                  fontSize: 28,
-                  fontWeight: 700,
-                  padding: "4px 0",
-                  width: "100%",
-                }}
-              />
-              {/* Unit toggle */}
-              <div
-                style={{
-                  display: "flex",
-                  background: "#1a1a2a",
-                  borderRadius: 10,
-                  padding: 3,
-                  border: `1px solid ${BORDER}`,
-                }}
-              >
+          <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 18, padding: 20, marginBottom: 16 }}>
+            <p style={{ fontFamily: MONO, fontSize: 9, color: "#555", letterSpacing: "0.14em", marginBottom: 16 }}>TODAY&apos;S WEIGHT</p>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+              <input type="number" inputMode="decimal" placeholder="0.0" value={weightLog.weightValue} onChange={(e) => { handleInteraction(); weightLog.setWeightValue(e.target.value); }} style={{ flex: 1, background: "transparent", border: "none", borderBottom: `2px solid ${BORDER}`, outline: "none", color: YELLOW, fontFamily: MONO, fontSize: 28, fontWeight: 700, padding: "4px 0", width: "100%" }} />
+              <div style={{ display: "flex", background: "#1a1a2a", borderRadius: 10, padding: 3, border: `1px solid ${BORDER}` }}>
                 {(["lbs", "kg"] as const).map((u) => (
-                  <button
-                    key={u}
-                    onClick={() => {
-                      touch();
-                      setWeightUnit(u);
-                    }}
-                    style={{
-                      padding: "5px 12px",
-                      borderRadius: 8,
-                      border: "none",
-                      background: weightUnit === u ? GREEN : "transparent",
-                      color: weightUnit === u ? "#0A0A0F" : "#555",
-                      fontFamily: MONO,
-                      fontSize: 10,
-                      fontWeight: 700,
-                      cursor: "pointer",
-                      transition: "all 0.15s ease",
-                    }}
-                  >
-                    {u}
-                  </button>
+                  <button key={u} onClick={() => { handleInteraction(); weightLog.setWeightUnit(u); }} style={{ padding: "5px 12px", borderRadius: 8, border: "none", background: weightLog.weightUnit === u ? GREEN : "transparent", color: weightLog.weightUnit === u ? "#0A0A0F" : "#555", fontFamily: MONO, fontSize: 10, fontWeight: 700 }}>{u}</button>
                 ))}
               </div>
             </div>
-
-            <button
-              onClick={saveWeight}
-              disabled={!weightValue || weightSaving}
-              style={{
-                width: "100%",
-                padding: "13px 0",
-                borderRadius: 12,
-                border: "none",
-                background: weightValue ? GREEN : "#1e1e2e",
-                color: weightValue ? "#0A0A0F" : "#444",
-                fontFamily: MONO,
-                fontSize: 11,
-                fontWeight: 700,
-                letterSpacing: "0.1em",
-                cursor: weightValue ? "pointer" : "not-allowed",
-                transition: "all 0.2s ease",
-              }}
-            >
-              {weightSaving ? "SAVING..." : "SAVE WEIGHT"}
+            <button onClick={() => weightLog.save()} disabled={!weightLog.weightValue || weightLog.saving} style={{ width: "100%", padding: "13px 0", borderRadius: 12, border: "none", background: weightLog.weightValue ? GREEN : "#1e1e2e", color: weightLog.weightValue ? "#0A0A0F" : "#444", fontFamily: MONO, fontSize: 11, fontWeight: 700 }}>
+              {weightLog.saving ? "SAVING..." : "SAVE WEIGHT"}
             </button>
           </div>
 
-          {/* Recent weights */}
-          <div
-            style={{
-              background: CARD,
-              border: `1px solid ${BORDER}`,
-              borderRadius: 18,
-              padding: 20,
-            }}
-          >
-            <p
-              style={{
-                fontFamily: MONO,
-                fontSize: 9,
-                color: "#555",
-                letterSpacing: "0.14em",
-                marginBottom: 14,
-              }}
-            >
-              RECENT
-            </p>
-            {recentWeights.length === 0 ? (
-              <p style={{ fontFamily: MONO, fontSize: 10, color: "#333" }}>
-                No entries yet
-              </p>
-            ) : (
-              recentWeights.map((w) => (
-                <div
-                  key={w.date}
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    paddingBottom: 10,
-                    marginBottom: 10,
-                    borderBottom: `1px solid ${BORDER}`,
-                  }}
-                >
-                  <span
-                    style={{
-                      fontFamily: MONO,
-                      fontSize: 10,
-                      color: "#555",
-                    }}
-                  >
-                    {formatDate(w.date)}
-                  </span>
-                  <span
-                    style={{
-                      fontFamily: MONO,
-                      fontSize: 13,
-                      color: YELLOW,
-                      fontWeight: 700,
-                    }}
-                  >
-                    {formatWeightDisplay(w.weight_kg)}
-                  </span>
-                </div>
-              ))
-            )}
+          <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 18, padding: 20 }}>
+            <p style={{ fontFamily: MONO, fontSize: 9, color: "#555", letterSpacing: "0.14em", marginBottom: 14 }}>RECENT</p>
+            {weightLog.recentWeights.length === 0 ? <p style={{ fontFamily: MONO, fontSize: 10, color: "#333" }}>No entries yet</p> : weightLog.recentWeights.map((w) => (
+              <div key={w.date} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingBottom: 10, marginBottom: 10, borderBottom: `1px solid ${BORDER}` }}>
+                <span style={{ fontFamily: MONO, fontSize: 10, color: "#555" }}>{formatDate(w.date)}</span>
+                <span style={{ fontFamily: MONO, fontSize: 13, color: YELLOW, fontWeight: 700 }}>{formatWeightDisplay(w.weight_kg || 0)}</span>
+              </div>
+            ))}
           </div>
         </div>
       )}
 
-      {/* ── Success overlay */}
-      {showSuccess && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: "rgba(10,10,15,0.85)",
-            zIndex: 100,
-            animation: "fadeIn 0.2s ease",
-          }}
-        >
-          <div
-            style={{
-              width: 72,
-              height: 72,
-              borderRadius: "50%",
-              background: "rgba(126,184,164,0.15)",
-              border: `2px solid ${GREEN}`,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              animation: "scaleIn 0.25s ease",
-            }}
-          >
+      {/* Success Overlay */}
+      {mealLog.showSuccess && (
+        <div style={{ position: "fixed", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(10,10,15,0.85)", zIndex: 100 }}>
+          <div style={{ width: 72, height: 72, borderRadius: "50%", background: "rgba(126,184,164,0.15)", border: `2px solid ${GREEN}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <span style={{ fontSize: 32, color: GREEN }}>✓</span>
           </div>
         </div>
       )}
-
-      <style>{`
-        @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
-        @keyframes scaleIn { from { transform: scale(0.6); opacity: 0 } to { transform: scale(1); opacity: 1 } }
-        @keyframes spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }
-      `}</style>
 
       <NavBar />
     </div>
