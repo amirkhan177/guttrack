@@ -49,8 +49,8 @@ export class AIService {
   private async withRetry<T>(fn: () => Promise<T>, retries = 3, delay = 1000): Promise<T> {
     try {
       return await fn();
-    } catch (err: any) {
-      const status = err.status || 0;
+    } catch (err: unknown) {
+      const status = (err as { status?: number }).status || 0;
       if ((status === 503 || status === 429) && retries > 0) {
         console.warn(`[AIService] AI service busy (${status}). Retrying in ${delay}ms... (${retries} left)`);
         await new Promise(resolve => setTimeout(resolve, delay));
