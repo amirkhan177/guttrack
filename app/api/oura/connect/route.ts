@@ -31,13 +31,18 @@ export async function GET() {
   const clientId = process.env.OURA_CLIENT_ID;
   const redirectUri = `https://guttrack-xi.vercel.app/api/oura/callback`;
   
-  // MATCHING USER EXAMPLE EXACTLY
-  const scope = 'email personal daily heartrate tag workout session spo2 ring_configuration stress heart_health';
+  if (!clientId) {
+    console.error('[oura/connect] OURA_CLIENT_ID is missing from environment');
+    return NextResponse.json({ error: 'System configuration error: OURA_CLIENT_ID is missing' }, { status: 500 });
+  }
 
-  // Order and params matching example (removed state)
+  const scope = 'email personal daily heartrate tag workout session spo2 ring_configuration stress heart_health';
   const url = `https://cloud.ouraring.com/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scope)}`;
 
-  console.log('[oura/connect] Redirecting to Oura with exact example parameters');
+  console.log('[oura/connect] Redirecting to Oura Auth Page...', {
+    clientIdPrefix: clientId.substring(0, 5),
+    redirectUri
+  });
 
   return NextResponse.redirect(url);
 }
@@ -48,7 +53,6 @@ export async function POST(request: NextRequest) {
     const { data: { user }, error: authError } = await supabase.auth.getUser();
 
     if (authError || !user) {
-      console.error('[oura/connect] Auth error:', authError);
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -56,13 +60,9 @@ export async function POST(request: NextRequest) {
     const useCase = new ConnectOuraUseCase();
     await useCase.execute(supabase, token);
 
-    return NextResponse.json({
-      success: true,
-      message: 'Oura Ring connected',
-    });
+    return NextResponse.json({ success: true });
   } catch (err: unknown) {
-    console.error('[oura/connect] Error:', err);
-    const message = err instanceof Error ? err.message : 'Failed to connect Oura Ring';
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error('[oura/connect] POST Error:', err);
+    return NextResponse.json({ error: 'Failed to connect Oura Ring' }, { status: 500 });
   }
 }

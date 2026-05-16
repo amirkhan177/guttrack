@@ -42,11 +42,11 @@ export async function POST() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const ouraToken: string | undefined = user.user_metadata?.oura_token;
+    const ouraToken = user.user_metadata?.oura_token;
     if (!ouraToken) {
       console.warn('[oura/sync] No token for user:', user.id);
       return NextResponse.json(
-        { error: 'Oura token not found. Please connect your Oura Ring first.' },
+        { error: 'Oura not connected. Please connect your Oura Ring in Settings.' },
         { status: 400 }
       );
     }
@@ -70,13 +70,16 @@ export async function POST() {
     console.log('[oura/sync] Success for user:', user.id);
     return NextResponse.json({
       success: true,
-      synced: [yesterday, today],
       synced_at: syncedAt,
     });
-  } catch (error) {
-    console.error('[oura/sync] Error:', error);
+  } catch (error: any) {
+    console.error('[oura/sync] Detailed Error:', {
+      message: error.message,
+      stack: error.stack,
+      user_id: (await getSupabaseServer().auth.getUser()).data.user?.id
+    });
     return NextResponse.json(
-      { error: 'Failed to sync Oura data' },
+      { error: error.message || 'Failed to sync Oura data' },
       { status: 500 }
     );
   }
