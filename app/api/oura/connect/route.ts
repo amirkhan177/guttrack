@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
+import { ConnectOuraUseCase } from '@/src/features/oura/use-cases/ConnectOuraUseCase';
 
 function getSupabaseServer() {
   const cookieStore = cookies();
@@ -26,7 +27,7 @@ function getSupabaseServer() {
   );
 }
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   const clientId = process.env.OURA_CLIENT_ID;
   const redirectUri = `https://guttrack-xi.vercel.app/api/oura/callback`;
   
@@ -36,14 +37,6 @@ export async function GET(request: NextRequest) {
 
   // Exact same string as working example
   const scope = 'email+personal+daily+heartrate+tag+workout+session+spo2+ring_configuration+stress+heart_health';
-  
-  // Use URL object to construct to ensure perfect encoding
-  const url = new URL('https://cloud.ouraring.com/oauth/authorize');
-  url.searchParams.set('client_id', clientId);
-  url.searchParams.set('redirect_uri', redirectUri);
-  url.searchParams.set('response_type', 'code');
-  // Note: URLSearchParams will encode + as %2B or spaces as +. 
-  // Oura might be picky. Let's try literal string first as it worked in example.
   
   const finalUrl = `https://cloud.ouraring.com/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${scope}`;
 
@@ -60,17 +53,12 @@ export async function POST(request: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { token } = await request.json();
-    const { error } = await supabase.auth.updateUser({
-      data: {
-        oura_token: token,
-        oura_connected: true,
-        oura_connected_at: new Date().toISOString()
-      }
-    });
+    const useCase = new ConnectOuraUseCase();
+    await useCase.execute(supabase, token);
     
-    if (error) throw error;
     return NextResponse.json({ success: true });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    const error = err as Error;
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
