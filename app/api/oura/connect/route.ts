@@ -29,17 +29,28 @@ function getSupabaseServer() {
 
 export async function GET(request: NextRequest) {
   const clientId = process.env.OURA_CLIENT_ID;
-  const redirectUri = `${new URL(request.url).origin}/api/oura/callback`;
+  const { origin } = new URL(request.url);
+  
+  // Use HTTPS origin in production
+  const finalOrigin = origin.includes('localhost') ? origin : 'https://guttrack-xi.vercel.app';
+  const redirectUri = `${finalOrigin}/api/oura/callback`;
+  
+  // Scopes from user example, but formatted with + as separators if needed
   const scope = 'email personal daily heartrate tag workout session spo2 ring_configuration stress heart_health';
   const state = Math.random().toString(36).substring(7);
 
   const url = `https://cloud.ouraring.com/oauth/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}&state=${state}`;
 
+  console.log('[oura/connect] Redirecting to Oura...', {
+    clientId: clientId?.substring(0, 5) + '...',
+    redirectUri,
+    scope
+  });
+
   return NextResponse.redirect(url);
 }
 
 export async function POST(request: NextRequest) {
-  // Keeping POST for backward compatibility or direct token entry if needed
   try {
     const supabase = getSupabaseServer();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -50,12 +61,9 @@ export async function POST(request: NextRequest) {
     }
 
     const { token } = await request.json();
-    console.log('[oura/connect] Attempting connect for user:', user.id);
-
     const useCase = new ConnectOuraUseCase();
     await useCase.execute(supabase, token);
 
-    console.log('[oura/connect] Success for user:', user.id);
     return NextResponse.json({
       success: true,
       message: 'Oura Ring connected',
