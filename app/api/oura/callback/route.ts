@@ -32,10 +32,12 @@ export async function GET(request: NextRequest) {
   const error = searchParams.get('error');
 
   if (error) {
+    console.error('[oura/callback] Error from Oura:', error);
     return NextResponse.redirect(`${origin}/settings?oura_error=${error}`);
   }
 
   if (!code) {
+    console.error('[oura/callback] No code received from Oura');
     return NextResponse.redirect(`${origin}/settings?oura_error=no_code`);
   }
 
@@ -43,6 +45,11 @@ export async function GET(request: NextRequest) {
     const clientId = process.env.OURA_CLIENT_ID;
     const clientSecret = process.env.OURA_CLIENT_SECRET;
     const redirectUri = `${origin}/api/oura/callback`;
+
+    console.log('[oura/callback] Initiating token exchange...', { 
+      clientId: clientId?.substring(0, 5) + '...',
+      redirectUri 
+    });
 
     // Exchange code for token
     const tokenResponse = await fetch('https://api.ouraring.com/oauth/token', {
@@ -60,18 +67,20 @@ export async function GET(request: NextRequest) {
     });
 
     if (!tokenResponse.ok) {
-      const errData = await tokenResponse.json();
-      console.error('[oura/callback] Token exchange failed:', errData);
+      const errText = await tokenResponse.text();
+      console.error('[oura/callback] Token exchange failed. Status:', tokenResponse.status, 'Error:', errText);
       return NextResponse.redirect(`${origin}/settings?oura_error=token_exchange_failed`);
     }
 
     const tokens = await tokenResponse.json();
+    console.log('[oura/callback] Tokens received successfully');
 
     // Save tokens to Supabase
     const supabase = getSupabaseServer();
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {
+      console.error('[oura/callback] No user session found during callback');
       return NextResponse.redirect(`${origin}/auth`);
     }
 
@@ -85,11 +94,15 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    if (updateError) throw updateError;
+    if (updateError) {
+      console.error('[oura/callback] Failed to update user metadata:', updateError);
+      throw updateError;
+    }
 
+    console.log('[oura/callback] Oura tokens saved for user:', user.id);
     return NextResponse.redirect(`${origin}/settings?oura_success=true`);
   } catch (err) {
-    console.error('[oura/callback] Error:', err);
+    console.error('[oura/callback] Unexpected error:', err);
     return NextResponse.redirect(`${origin}/settings?oura_error=internal_error`);
   }
 }
