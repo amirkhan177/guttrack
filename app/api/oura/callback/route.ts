@@ -27,22 +27,22 @@ function getSupabaseServer() {
 }
 
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
+  const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get('code');
   const error = searchParams.get('error');
 
   if (error) {
-    return NextResponse.redirect(`${window.location.origin}/settings?oura_error=${error}`);
+    return NextResponse.redirect(`${origin}/settings?oura_error=${error}`);
   }
 
   if (!code) {
-    return NextResponse.redirect(`${window.location.origin}/settings?oura_error=no_code`);
+    return NextResponse.redirect(`${origin}/settings?oura_error=no_code`);
   }
 
   try {
     const clientId = process.env.OURA_CLIENT_ID;
     const clientSecret = process.env.OURA_CLIENT_SECRET;
-    const redirectUri = `${new URL(request.url).origin}/api/oura/callback`;
+    const redirectUri = `${origin}/api/oura/callback`;
 
     // Exchange code for token
     const tokenResponse = await fetch('https://api.ouraring.com/oauth/token', {
@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
     if (!tokenResponse.ok) {
       const errData = await tokenResponse.json();
       console.error('[oura/callback] Token exchange failed:', errData);
-      return NextResponse.redirect(`${new URL(request.url).origin}/settings?oura_error=token_exchange_failed`);
+      return NextResponse.redirect(`${origin}/settings?oura_error=token_exchange_failed`);
     }
 
     const tokens = await tokenResponse.json();
@@ -72,7 +72,7 @@ export async function GET(request: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {
-      return NextResponse.redirect(`${new URL(request.url).origin}/auth`);
+      return NextResponse.redirect(`${origin}/auth`);
     }
 
     const { error: updateError } = await supabase.auth.updateUser({
@@ -87,9 +87,9 @@ export async function GET(request: NextRequest) {
 
     if (updateError) throw updateError;
 
-    return NextResponse.redirect(`${new URL(request.url).origin}/settings?oura_success=true`);
+    return NextResponse.redirect(`${origin}/settings?oura_success=true`);
   } catch (err) {
     console.error('[oura/callback] Error:', err);
-    return NextResponse.redirect(`${new URL(request.url).origin}/settings?oura_error=internal_error`);
+    return NextResponse.redirect(`${origin}/settings?oura_error=internal_error`);
   }
 }
