@@ -30,7 +30,7 @@ function getSupabaseServer() {
 export async function GET(request: NextRequest) {
   const clientId = process.env.OURA_CLIENT_ID;
   const redirectUri = `${new URL(request.url).origin}/api/oura/callback`;
-  const scope = 'personal daily readiness sleep activity stress heartrate';
+  const scope = 'email personal daily heartrate tag workout session spo2 ring_configuration stress heart_health';
   const state = Math.random().toString(36).substring(7);
 
   const url = `https://cloud.ouraring.com/oauth/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}&state=${state}`;
