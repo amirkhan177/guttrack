@@ -29,14 +29,24 @@ function getSupabaseServer() {
 
 export async function GET(request: NextRequest) {
   const clientId = process.env.OURA_CLIENT_ID;
-  const { origin } = new URL(request.url);
   
-  // Use HTTPS origin in production
-  const finalOrigin = origin.includes('localhost') ? origin : 'https://guttrack-xi.vercel.app';
-  const redirectUri = `${finalOrigin}/api/oura/callback`;
+  // Use exact production origin to prevent mismatch
+  const redirectUri = `https://guttrack-xi.vercel.app/api/oura/callback`;
   
-  // Scopes from user example, but formatted with + as separators if needed
-  const scope = 'email personal daily heartrate tag workout session spo2 ring_configuration stress heart_health';
+  // Simplified scopes - only the standard ones
+  const scopes = [
+    'email',
+    'personal',
+    'daily',
+    'heartrate',
+    'workout',
+    'tag',
+    'session',
+    'spo2',
+    'stress'
+  ];
+  
+  const scope = scopes.join(' ');
   const state = Math.random().toString(36).substring(7);
 
   const url = `https://cloud.ouraring.com/oauth/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}&state=${state}`;
