@@ -27,9 +27,12 @@ function getSupabaseServer() {
 }
 
 export async function GET(request: NextRequest) {
-  const { searchParams, origin } = new URL(request.url);
+  const { searchParams } = new URL(request.url);
   const code = searchParams.get('code');
   const error = searchParams.get('error');
+  
+  // FORCE HTTPS ORIGIN
+  const origin = 'https://guttrack-xi.vercel.app';
 
   if (error) {
     console.error('[oura/callback] Error from Oura:', error);
@@ -46,8 +49,8 @@ export async function GET(request: NextRequest) {
     const clientSecret = process.env.OURA_CLIENT_SECRET;
     const redirectUri = `${origin}/api/oura/callback`;
 
-    console.log('[oura/callback] Initiating token exchange...', { 
-      clientId: clientId?.substring(0, 5) + '...',
+    console.log('[oura/callback] Exchanging code for tokens...', { 
+      clientIdPrefix: clientId?.substring(0, 5),
       redirectUri 
     });
 
@@ -77,13 +80,14 @@ export async function GET(request: NextRequest) {
 
     // Save tokens to Supabase
     const supabase = getSupabaseServer();
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
 
-    if (!user) {
-      console.error('[oura/callback] No user session found during callback');
+    if (userError || !user) {
+      console.error('[oura/callback] Auth error or No user session:', userError);
       return NextResponse.redirect(`${origin}/auth`);
     }
 
+    console.log('[oura/callback] Updating metadata for user:', user.id);
     const { error: updateError } = await supabase.auth.updateUser({
       data: {
         oura_token: tokens.access_token,
@@ -96,13 +100,13 @@ export async function GET(request: NextRequest) {
 
     if (updateError) {
       console.error('[oura/callback] Failed to update user metadata:', updateError);
-      throw updateError;
+      return NextResponse.redirect(`${origin}/settings?oura_error=db_update_failed`);
     }
 
-    console.log('[oura/callback] Oura tokens saved for user:', user.id);
+    console.log('[oura/callback] Oura tokens saved successfully for user:', user.id);
     return NextResponse.redirect(`${origin}/settings?oura_success=true`);
   } catch (err) {
-    console.error('[oura/callback] Unexpected error:', err);
+    console.error('[oura/callback] Unexpected exception:', err);
     return NextResponse.redirect(`${origin}/settings?oura_error=internal_error`);
   }
 }
