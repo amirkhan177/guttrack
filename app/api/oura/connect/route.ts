@@ -36,8 +36,8 @@ export async function GET() {
     return NextResponse.json({ error: 'System configuration error: OURA_CLIENT_ID is missing' }, { status: 500 });
   }
 
-  const scope = 'email personal daily heartrate tag workout session spo2 ring_configuration stress heart_health';
-  const url = `https://cloud.ouraring.com/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scope)}`;
+  const scope = 'email+personal+daily+heartrate+tag+workout+session+spo2+ring_configuration+stress+heart_health';
+  const url = `https://cloud.ouraring.com/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${scope}`;
 
   console.log('[oura/connect] Redirecting to Oura Auth Page...', {
     clientIdPrefix: clientId.substring(0, 5),
