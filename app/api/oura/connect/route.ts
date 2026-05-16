@@ -27,7 +27,7 @@ function getSupabaseServer() {
   );
 }
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   const clientId = process.env.OURA_CLIENT_ID;
   
   // Use exact production origin to prevent mismatch
