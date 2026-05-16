@@ -29,33 +29,15 @@ function getSupabaseServer() {
 
 export async function GET() {
   const clientId = process.env.OURA_CLIENT_ID;
-  
-  // Use exact production origin to prevent mismatch
   const redirectUri = `https://guttrack-xi.vercel.app/api/oura/callback`;
   
-  // Simplified scopes - only the standard ones
-  const scopes = [
-    'email',
-    'personal',
-    'daily',
-    'heartrate',
-    'workout',
-    'tag',
-    'session',
-    'spo2',
-    'stress'
-  ];
-  
-  const scope = scopes.join(' ');
-  const state = Math.random().toString(36).substring(7);
+  // MATCHING USER EXAMPLE EXACTLY
+  const scope = 'email personal daily heartrate tag workout session spo2 ring_configuration stress heart_health';
 
-  const url = `https://cloud.ouraring.com/oauth/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}&state=${state}`;
+  // Order and params matching example (removed state)
+  const url = `https://cloud.ouraring.com/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scope)}`;
 
-  console.log('[oura/connect] Redirecting to Oura...', {
-    clientId: clientId?.substring(0, 5) + '...',
-    redirectUri,
-    scope
-  });
+  console.log('[oura/connect] Redirecting to Oura with exact example parameters');
 
   return NextResponse.redirect(url);
 }
