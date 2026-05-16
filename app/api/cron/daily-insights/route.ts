@@ -5,6 +5,7 @@ import { UserRepository } from '@/src/data/repositories/UserRepository';
 import { SyncOuraDataUseCase } from '@/src/features/oura/use-cases/SyncOuraDataUseCase';
 import { GenerateDailyInsightUseCase } from '@/src/features/insights/use-cases/GenerateDailyInsightUseCase';
 import { getMtnDate } from '@/lib/dates';
+import { createSupabaseServiceClient } from '@/lib/supabase';
 
 export async function GET(req: NextRequest) {
   try {
@@ -13,6 +14,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const supabase = createSupabaseServiceClient();
     const userRepo = new UserRepository();
     const apiKey = process.env.AI_API_KEY || process.env.GEMINI_API_KEY;
     if (!apiKey) {
@@ -40,10 +42,10 @@ export async function GET(req: NextRequest) {
         // 2. Sync Oura
         const ouraToken = user.user_metadata.oura_token as string;
         if (ouraToken) {
-          const syncUseCase = new SyncOuraDataUseCase(ouraToken);
+          const syncUseCase = new SyncOuraDataUseCase();
           await Promise.allSettled([
-            syncUseCase.execute(user.id, yesterday),
-            syncUseCase.execute(user.id, today),
+            syncUseCase.execute(supabase, user.id, yesterday),
+            syncUseCase.execute(supabase, user.id, today),
           ]);
         }
 

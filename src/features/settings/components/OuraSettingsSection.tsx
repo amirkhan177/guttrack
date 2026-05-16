@@ -3,33 +3,20 @@
 import {
   SectionLabel,
   Card,
-  FieldLabel,
-  MaskedInput,
   ActionButton,
   GREEN,
-  RED,
   MONO,
 } from "./SettingsUI";
 
 interface OuraSettingsSectionProps {
-  ouraToken: string;
-  setOuraToken: (val: string) => void;
   ouraConnected: boolean;
   ouraLastSync: string | null;
-  ouraSaving: boolean;
-  ouraTestResult: string | null;
-  saveOuraToken: () => void;
   testOuraConnection: () => void;
 }
 
 export function OuraSettingsSection({
-  ouraToken,
-  setOuraToken,
   ouraConnected,
   ouraLastSync,
-  ouraSaving,
-  ouraTestResult,
-  saveOuraToken,
   testOuraConnection,
 }: OuraSettingsSectionProps) {
   return (
@@ -61,44 +48,24 @@ export function OuraSettingsSection({
           )}
         </div>
 
-        <div>
-          <FieldLabel>Personal Access Token</FieldLabel>
-          <MaskedInput
-            value={ouraToken}
-            onChange={setOuraToken}
-            placeholder="Enter Oura PAT..."
-          />
-        </div>
-
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 4 }}>
           <ActionButton
-            onClick={saveOuraToken}
+            onClick={() => window.location.href = "/api/oura/connect"}
             variant="green"
-            disabled={ouraSaving || !ouraToken.trim()}
+            fullWidth
           >
-            {ouraSaving ? "SAVING..." : "SAVE"}
+            {ouraConnected ? "RECONNECT OURA RING" : "CONNECT OURA RING"}
           </ActionButton>
+          
           <ActionButton
             onClick={testOuraConnection}
             variant="ghost"
             disabled={!ouraConnected}
+            fullWidth
           >
-            TEST CONNECTION
+            TEST SYNC
           </ActionButton>
         </div>
-
-        {ouraTestResult && (
-          <div
-            style={{
-              ...MONO,
-              fontSize: 10,
-              color: ouraTestResult.includes("successful") ? GREEN : RED,
-              paddingTop: 2,
-            }}
-          >
-            {ouraTestResult.toUpperCase()}
-          </div>
-        )}
       </Card>
     </>
   );

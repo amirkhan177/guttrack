@@ -2,6 +2,7 @@ import { OuraService } from '@/src/data/services/OuraService';
 import { OuraRepository } from '@/src/data/repositories/OuraRepository';
 import { WorkoutRepository } from '@/src/data/repositories/WorkoutRepository';
 import { WeightRepository } from '@/src/data/repositories/WeightRepository';
+import { SupabaseClient } from '@supabase/supabase-js';
 
 interface OuraResponseItem {
   day: string;
@@ -9,16 +10,43 @@ interface OuraResponseItem {
 }
 
 export class SyncOuraDataUseCase {
-  private ouraService: OuraService;
   private ouraRepo = new OuraRepository();
   private workoutRepo = new WorkoutRepository();
   private weightRepo = new WeightRepository();
 
-  constructor(token: string) {
-    this.ouraService = new OuraService(token);
-  }
+  async execute(supabase: SupabaseClient, userId: string, targetCycleDate: string): Promise<void> {
+    // 1. Get user metadata to check for tokens
+    const { data: userData, error: userError } = await supabase.auth.admin.getUserById(userId);
+    if (userError || !userData.user) throw new Error('User not found');
 
-  async execute(userId: string, targetCycleDate: string): Promise<void> {
+    const meta = userData.user.user_metadata;
+    let accessToken = meta.oura_token;
+    const refreshToken = meta.oura_refresh_token;
+    const expiresAt = meta.oura_token_expires_at;
+
+    if (!accessToken) throw new Error('Oura not connected');
+
+    // 2. Refresh token if expired (or close to expiring - within 5 mins)
+    if (refreshToken && expiresAt && new Date(expiresAt).getTime() - Date.now() < 300000) {
+      console.log(`[SyncOuraDataUseCase] Refreshing Oura token for user ${userId}`);
+      try {
+        const newTokens = await OuraService.refreshAccessToken(refreshToken);
+        accessToken = newTokens.access_token;
+        
+        await supabase.auth.admin.updateUserById(userId, {
+          user_metadata: {
+            ...meta,
+            oura_token: newTokens.access_token,
+            oura_refresh_token: newTokens.refresh_token,
+            oura_token_expires_at: new Date(Date.now() + newTokens.expires_in * 1000).toISOString(),
+          }
+        });
+      } catch (err) {
+        console.error(`[SyncOuraDataUseCase] Failed to refresh token for user ${userId}:`, err);
+      }
+    }
+
+    const ouraService = new OuraService(accessToken);
     // Fetch data for the calendar day of the cycle, and the previous day for context
     const endDate = targetCycleDate;
     const endObj = new Date(`${targetCycleDate}T12:00:00`);
@@ -29,13 +57,13 @@ export class SyncOuraDataUseCase {
 
     const [readiness, sleep, activity, stress, resilience, vo2, workouts] =
       await Promise.allSettled([
-        this.ouraService.fetchDailyReadiness(startDate, endDate) as Promise<OuraResponseItem[]>,
-        this.ouraService.fetchDailySleep(startDate, endDate) as Promise<OuraResponseItem[]>,
-        this.ouraService.fetchDailyActivity(startDate, endDate) as Promise<OuraResponseItem[]>,
-        this.ouraService.fetchDailyStress(startDate, endDate) as Promise<OuraResponseItem[]>,
-        this.ouraService.fetchDailyResilience(startDate, endDate) as Promise<OuraResponseItem[]>,
-        this.ouraService.fetchVo2Max(startDate, endDate) as Promise<OuraResponseItem[]>,
-        this.ouraService.fetchWorkouts(startDate, endDate) as Promise<OuraResponseItem[]>,
+        ouraService.fetchDailyReadiness(startDate, endDate) as Promise<OuraResponseItem[]>,
+        ouraService.fetchDailySleep(startDate, endDate) as Promise<OuraResponseItem[]>,
+        ouraService.fetchDailyActivity(startDate, endDate) as Promise<OuraResponseItem[]>,
+        ouraService.fetchDailyStress(startDate, endDate) as Promise<OuraResponseItem[]>,
+        ouraService.fetchDailyResilience(startDate, endDate) as Promise<OuraResponseItem[]>,
+        ouraService.fetchVo2Max(startDate, endDate) as Promise<OuraResponseItem[]>,
+        ouraService.fetchWorkouts(startDate, endDate) as Promise<OuraResponseItem[]>,
       ]);
 
     // Log failures
@@ -167,7 +195,7 @@ export class SyncOuraDataUseCase {
     // 3. Personal Info / Weight
     try {
       console.log(`[SyncOuraDataUseCase] Fetching personal info for weight sync`);
-      const info = await this.ouraService.fetchPersonalInfo();
+      const info = await ouraService.fetchPersonalInfo();
       if (info.weight) {
         await this.weightRepo.upsertWeight({
           user_id: userId,

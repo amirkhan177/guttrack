@@ -13,12 +13,8 @@ import { clearSession } from "@/lib/crypto";
 
 export default function SettingsPage() {
   const {
-    ouraToken, setOuraToken,
     ouraConnected,
     ouraLastSync,
-    ouraSaving,
-    ouraTestResult,
-    saveOuraToken,
     testOuraConnection,
 
     aiKey, setAIKey,
@@ -68,13 +64,8 @@ export default function SettingsPage() {
 
       <div style={{ padding: "0 20px" }}>
         <OuraSettingsSection
-          ouraToken={ouraToken}
-          setOuraToken={setOuraToken}
           ouraConnected={ouraConnected}
           ouraLastSync={ouraLastSync}
-          ouraSaving={ouraSaving}
-          ouraTestResult={ouraTestResult}
-          saveOuraToken={saveOuraToken}
           testOuraConnection={testOuraConnection}
         />
 

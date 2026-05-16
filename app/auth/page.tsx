@@ -3,6 +3,7 @@
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
+import Image from "next/image";
 
 const mono = "SF Mono, ui-monospace, monospace";
 const serif = "Georgia, serif";
@@ -18,7 +19,7 @@ export default function AuthPage() {
 
   const codeLength = 8;
 
-  async function handleOAuthLogin(provider: "google" | "github") {
+  async function handleOAuthLogin(provider: "google") {
     setLoading(true);
     setError("");
     const supabase = createSupabaseBrowserClient();
@@ -138,7 +139,7 @@ export default function AuthPage() {
                 cursor: "pointer",
               }}
             >
-              <img src="https://www.google.com/favicon.ico" width={16} height={16} alt="Google" />
+              <Image src="https://www.google.com/favicon.ico" width={16} height={16} alt="Google" />
               CONTINUE WITH GOOGLE
             </button>
 

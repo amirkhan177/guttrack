@@ -41,7 +41,32 @@ export async function GET(req: NextRequest) {
     await Promise.allSettled(
       ouraUsers.map(async (user) => {
         try {
-          const client = new OuraClient(user.user_metadata.oura_token as string)
+          const meta = user.user_metadata;
+          let accessToken = meta.oura_token;
+          const refreshToken = meta.oura_refresh_token;
+          const expiresAt = meta.oura_token_expires_at;
+
+          // Refresh if expired or expiring soon (within 1 hour for cron)
+          if (refreshToken && expiresAt && (new Date(expiresAt).getTime() - Date.now() < 3600000)) {
+            console.log(`[cron/oura-sync] Refreshing token for user ${user.id}`);
+            try {
+              const newTokens = await OuraClient.refreshAccessToken(refreshToken);
+              accessToken = newTokens.access_token;
+              
+              await service.auth.admin.updateUserById(user.id, {
+                user_metadata: {
+                  ...meta,
+                  oura_token: newTokens.access_token,
+                  oura_refresh_token: newTokens.refresh_token,
+                  oura_token_expires_at: new Date(Date.now() + newTokens.expires_in * 1000).toISOString(),
+                }
+              });
+            } catch (err) {
+              console.error(`[cron/oura-sync] Refresh failed for user ${user.id}:`, err);
+            }
+          }
+
+          const client = new OuraClient(accessToken)
           // Sync yesterday + today to catch any late-arriving data
           await Promise.allSettled([
             client.syncToSupabase(user.id, yesterday),
@@ -51,7 +76,7 @@ export async function GET(req: NextRequest) {
           // Update last sync timestamp
           await service.auth.admin.updateUserById(user.id, {
             user_metadata: {
-              ...user.user_metadata,
+              ...(await service.auth.admin.getUserById(user.id)).data.user?.user_metadata, // Get latest metadata to avoid overwriting tokens
               oura_last_sync: new Date().toISOString(),
             },
           })

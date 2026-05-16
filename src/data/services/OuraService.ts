@@ -14,7 +14,49 @@ async function fetchWithRetry(url: string, token: string, attempt = 0): Promise<
 }
 
 export class OuraService {
-  constructor(private token: string) {}
+  private token: string;
+
+  constructor(token: string) {
+    this.token = token;
+  }
+
+  static async refreshAccessToken(refreshToken: string): Promise<{
+    access_token: string;
+    refresh_token: string;
+    expires_in: number;
+  }> {
+    const clientId = process.env.OURA_CLIENT_ID;
+    const clientSecret = process.env.OURA_CLIENT_SECRET;
+
+    if (!clientId || !clientSecret) {
+      throw new Error('Oura Client ID or Secret is not configured');
+    }
+
+    const response = await fetch('https://api.ouraring.com/oauth/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        grant_type: 'refresh_token',
+        refresh_token: refreshToken,
+        client_id: clientId,
+        client_secret: clientSecret,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      console.error('[OuraService] Token refresh failed:', error);
+      throw new Error('Failed to refresh Oura access token');
+    }
+
+    return response.json();
+  }
+
+  updateToken(newToken: string) {
+    this.token = newToken;
+  }
 
   private async get<T>(path: string, params: Record<string, string>): Promise<T[]> {
     const url = new URL(`${BASE_URL}${path}`);

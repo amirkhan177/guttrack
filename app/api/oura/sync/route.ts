@@ -52,14 +52,14 @@ export async function POST() {
     }
 
     console.log('[oura/sync] Starting sync for user:', user.id);
-    const syncUseCase = new SyncOuraDataUseCase(ouraToken);
+    const syncUseCase = new SyncOuraDataUseCase();
 
     const today = getMtnDate(0);
     const yesterday = getMtnDate(-1);
 
     await Promise.all([
-      syncUseCase.execute(user.id, today),
-      syncUseCase.execute(user.id, yesterday),
+      syncUseCase.execute(supabase, user.id, today),
+      syncUseCase.execute(supabase, user.id, yesterday),
     ]);
 
     const syncedAt = new Date().toISOString();
