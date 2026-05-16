@@ -72,14 +72,14 @@ export async function POST() {
       success: true,
       synced_at: syncedAt,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const err = error as { message?: string; stack?: string };
     console.error('[oura/sync] Detailed Error:', {
-      message: error.message,
-      stack: error.stack,
-      user_id: (await getSupabaseServer().auth.getUser()).data.user?.id
+      message: err.message,
+      stack: err.stack,
     });
     return NextResponse.json(
-      { error: error.message || 'Failed to sync Oura data' },
+      { error: err.message || 'Failed to sync Oura data' },
       { status: 500 }
     );
   }
